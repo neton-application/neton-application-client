@@ -1,0 +1,20 @@
+{
+  "name": "@neton/application-front-module-system",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./manifest": "./src/manifest.ts",
+    "./pages/*": "./src/pages/*.tsx"
+  },
+  "peerDependencies": { "react": "^19.0.0" },
+  "devDependencies": {
+    "@neton/application-front-contract": "workspace:*",
+    "@neton/application-front-kit": "workspace:*",
+    "@neton/application-front-runtime": "workspace:*",
+    "@types/react": "^19.0.0",
+    "react": "^19.2.0",
+    "typescript": "^5.7.0"
+  }
+}

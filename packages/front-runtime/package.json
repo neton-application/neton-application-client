@@ -1,0 +1,21 @@
+{
+  "name": "@neton/application-front-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./client": "./src/client.ts",
+    "./menu": "./src/menu.ts",
+    "./types": "./src/types.ts"
+  },
+  "peerDependencies": { "react": "^19.0.0" },
+  "devDependencies": {
+    "@neton/application-front-contract": "workspace:*",
+    "@types/react": "^19.0.0",
+    "react": "^19.2.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "neton-application-front",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @neton/application-front-shell dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "registry": "tsx scripts/generate-registry.mts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  }
+}
