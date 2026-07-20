@@ -53,3 +53,19 @@ export interface PageResponse<T> {
   size: number;
   totalPages: number;
 }
+
+export function formatDateTime(value?: number | string | null): string {
+  if (value === null || value === undefined || value === "" || value === 0 || value === "0") return "-";
+  const numeric = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+  const milliseconds = typeof numeric === "number" && numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+  const date = new Date(milliseconds);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}

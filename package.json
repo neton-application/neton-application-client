@@ -3,8 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --filter @neton/application-front-shell dev",
-    "build": "turbo run build",
-    "typecheck": "turbo run typecheck",
+    "build": "pnpm --filter @neton/application-front-shell build",
+    "typecheck": "pnpm registry && pnpm --filter @neton/application-front-shell typecheck",
     "registry": "tsx scripts/generate-registry.mts"
   },
   "devDependencies": {

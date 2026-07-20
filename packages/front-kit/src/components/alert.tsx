@@ -7,9 +7,9 @@ export function Alert({
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & { tone?: "info" | "error" | "warning" }) {
   const tones = {
-    info: "border-blue-200 bg-blue-50 text-blue-800",
-    error: "border-red-200 bg-red-50 text-red-800",
-    warning: "border-amber-200 bg-amber-50 text-amber-800",
+    info: "border-[var(--border)] bg-[var(--card)] text-[var(--body-foreground)]",
+    error: "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-400",
+    warning: "border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-400",
   } as const;
   return <div className={cn("rounded-md border px-4 py-3 text-sm", tones[tone], className)} {...props} />;
 }

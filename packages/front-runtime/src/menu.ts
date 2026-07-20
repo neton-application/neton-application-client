@@ -3,6 +3,7 @@ import type { MenuNode } from "./types";
 export interface NavItem {
   name: string;
   path: string;
+  icon?: string | null;
   children?: NavItem[];
 }
 
@@ -27,6 +28,13 @@ export function buildRouteMap(menus: MenuNode[]): Record<string, string> {
   return map;
 }
 
+/** 精确匹配 manifest 路径；`:segment` 只匹配一个非空 URL segment。 */
+export function matchManifestPath(pattern: string, pathname: string): boolean {
+  const expected = pattern.split("/").filter(Boolean);
+  const actual = pathname.split("/").filter(Boolean);
+  return expected.length === actual.length && expected.every((part, index) => part.startsWith(":") || part === actual[index]);
+}
+
 /** 菜单树 → 侧栏导航（目录+菜单，尊重 visible/status/sort）。 */
 export function buildNav(menus: MenuNode[]): NavItem[] {
   const walk = (nodes: MenuNode[], base: string): NavItem[] =>
@@ -36,7 +44,12 @@ export function buildNav(menus: MenuNode[]): NavItem[] {
       .map((n) => {
         const full = joinPath(base, n.path);
         const children = n.children?.length ? walk(n.children, full) : undefined;
-        return { name: n.name, path: full, children: children?.length ? children : undefined };
+        return {
+          name: n.name,
+          path: full,
+          icon: n.icon,
+          children: children?.length ? children : undefined,
+        };
       });
   return walk(menus, "");
 }

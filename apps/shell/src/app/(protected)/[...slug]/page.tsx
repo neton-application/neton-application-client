@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getPermissionInfo, SESSION_COOKIE } from "@neton/application-front-runtime/server";
-import { buildRouteMap } from "@neton/application-front-runtime/menu";
-import { pageRegistry } from "@/generated/modules.generated";
+import { buildRouteMap, matchManifestPath } from "@neton/application-front-runtime/menu";
+import { installedModules, pageRegistry } from "@/generated/modules.generated";
 import { Alert } from "@neton/application-front-kit";
 
 /**
@@ -18,7 +18,8 @@ export default async function CatchAllPage({ params }: { params: Promise<{ slug:
   if (res.code !== 0 || !res.data) redirect("/login");
 
   const pathname = `/${slug.join("/")}`;
-  const componentKey = buildRouteMap(res.data.menus)[pathname];
+  const standalone = installedModules.flatMap((module) => module.pages).find((page) => page.standalone && matchManifestPath(page.path, pathname));
+  const componentKey = buildRouteMap(res.data.menus)[pathname] ?? standalone?.key;
   if (!componentKey) notFound();
 
   const loader = pageRegistry[componentKey];
