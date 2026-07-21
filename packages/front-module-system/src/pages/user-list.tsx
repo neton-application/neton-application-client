@@ -11,17 +11,17 @@ import {
 
 interface User {
   id: number; username: string; nickname: string; email?: string | null; mobile?: string | null;
-  avatar?: string | null; sex?: number; deptId?: number; remark?: string | null; status: number;
+  avatar?: string | null; gender?: number; deptId?: number; remark?: string | null; status: number;
   createdAt?: string | null; updatedAt?: string | null;
 }
 interface Role { id: number; code: string; name: string; status: number }
 interface Dept { id: number; name: string; parentId?: number; status: number }
 interface UserForm {
   id?: number; username: string; password: string; nickname: string; deptId: string;
-  email: string; mobile: string; sex: number; status: number; remark: string;
+  email: string; mobile: string; gender: number; status: number; remark: string;
 }
 type Pending = { type: "delete" | "status"; user: User };
-const emptyForm: UserForm = { username: "", password: "", nickname: "", deptId: "", email: "", mobile: "", sex: 0, status: 1, remark: "" };
+const emptyForm: UserForm = { username: "", password: "", nickname: "", deptId: "", email: "", mobile: "", gender: 0, status: 1, remark: "" };
 
 export default function SystemUserListPage() {
   const queryClient = useQueryClient();
@@ -54,7 +54,7 @@ export default function SystemUserListPage() {
     mutationFn: (value: UserForm) => apiWrite<void>(value.id ? "/admin/system/user/update" : "/admin/system/user/create", value.id ? "PUT" : "POST", {
       ...(value.id ? { id: value.id } : { password: value.password }), username: value.username.trim(), nickname: value.nickname.trim(),
       deptId: value.deptId ? Number(value.deptId) : null, email: value.email.trim() || null, mobile: value.mobile.trim() || null,
-      sex: value.sex, status: value.status, remark: value.remark.trim() || null,
+      gender: value.gender, status: value.status, remark: value.remark.trim() || null,
     }),
     onSuccess: async () => { setForm(null); await queryClient.invalidateQueries({ queryKey: ["system-users"] }); },
     onError: (cause: Error) => setError(cause.message),
@@ -80,7 +80,7 @@ export default function SystemUserListPage() {
     setError(null);
     try {
       const detail = await apiFetch<User>(`/admin/system/user/get/${user.id}`);
-      setForm({ id: detail.id, username: detail.username, password: "", nickname: detail.nickname, deptId: detail.deptId ? String(detail.deptId) : "", email: detail.email ?? "", mobile: detail.mobile ?? "", sex: detail.sex ?? 0, status: detail.status, remark: detail.remark ?? "" });
+      setForm({ id: detail.id, username: detail.username, password: "", nickname: detail.nickname, deptId: detail.deptId ? String(detail.deptId) : "", email: detail.email ?? "", mobile: detail.mobile ?? "", gender: detail.gender ?? 0, status: detail.status, remark: detail.remark ?? "" });
     } catch (cause) { setError((cause as Error).message); }
   }
   async function openRoles(user: User) {
@@ -123,7 +123,7 @@ export default function SystemUserListPage() {
     <section className="front-surface overflow-hidden rounded-xl"><DataTable columns={columns} rows={users.data?.list ?? []} rowKey={(user) => user.id} loading={users.isPending} error={users.error?.message} minWidth={980} /><Pagination page={page} pageSize={pageSize} total={users.data?.total ?? 0} loading={users.isFetching} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} /></section>
 
     <Drawer open={Boolean(form)} onClose={() => setForm(null)} title={form?.id ? "编辑管理员资料" : "新增管理员"} description="账号用于登录，角色决定可访问的菜单与操作权限。" footer={<><Button variant="ghost" onClick={() => setForm(null)}>取消</Button><Button type="submit" form="system-user-form" disabled={save.isPending}>{save.isPending ? "保存中…" : "保存"}</Button></>}>
-      {form && <form id="system-user-form" onSubmit={submitUser} className="space-y-4">{error && <div className="rounded-md bg-red-50 p-3 text-xs text-red-700">{error}</div>}<Field label="登录账号"><Input value={form.username} disabled={Boolean(form.id)} onChange={(event) => setForm({ ...form, username: event.target.value })} /></Field>{!form.id && <Field label="初始密码"><Input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="至少 8 个字符" /></Field>}<Field label="显示昵称"><Input value={form.nickname} onChange={(event) => setForm({ ...form, nickname: event.target.value })} /></Field><Field label="所属部门"><Select value={form.deptId} onChange={(event) => setForm({ ...form, deptId: event.target.value })}><option value="">不指定部门</option>{(depts.data ?? []).map((dept) => <option key={dept.id} value={dept.id}>{dept.name}</option>)}</Select></Field><div className="grid grid-cols-2 gap-3"><Field label="手机号"><Input value={form.mobile} onChange={(event) => setForm({ ...form, mobile: event.target.value })} /></Field><Field label="邮箱"><Input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field></div><div className="grid grid-cols-2 gap-3"><Field label="性别"><Select value={form.sex} onChange={(event) => setForm({ ...form, sex: Number(event.target.value) })}><option value="0">未知</option><option value="1">男</option><option value="2">女</option></Select></Field><Field label="状态"><Select value={form.status} onChange={(event) => setForm({ ...form, status: Number(event.target.value) })}><option value="1">启用</option><option value="0">停用</option></Select></Field></div><Field label="备注"><Textarea value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></Field></form>}
+      {form && <form id="system-user-form" onSubmit={submitUser} className="space-y-4">{error && <div className="rounded-md bg-red-50 p-3 text-xs text-red-700">{error}</div>}<Field label="登录账号"><Input value={form.username} disabled={Boolean(form.id)} onChange={(event) => setForm({ ...form, username: event.target.value })} /></Field>{!form.id && <Field label="初始密码"><Input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="至少 8 个字符" /></Field>}<Field label="显示昵称"><Input value={form.nickname} onChange={(event) => setForm({ ...form, nickname: event.target.value })} /></Field><Field label="所属部门"><Select value={form.deptId} onChange={(event) => setForm({ ...form, deptId: event.target.value })}><option value="">不指定部门</option>{(depts.data ?? []).map((dept) => <option key={dept.id} value={dept.id}>{dept.name}</option>)}</Select></Field><div className="grid grid-cols-2 gap-3"><Field label="手机号"><Input value={form.mobile} onChange={(event) => setForm({ ...form, mobile: event.target.value })} /></Field><Field label="邮箱"><Input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field></div><div className="grid grid-cols-2 gap-3"><Field label="性别"><Select value={form.gender} onChange={(event) => setForm({ ...form, gender: Number(event.target.value) })}><option value="0">未知</option><option value="1">男</option><option value="2">女</option></Select></Field><Field label="状态"><Select value={form.status} onChange={(event) => setForm({ ...form, status: Number(event.target.value) })}><option value="1">启用</option><option value="0">停用</option></Select></Field></div><Field label="备注"><Textarea value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></Field></form>}
     </Drawer>
 
     <Drawer open={Boolean(rolesFor)} onClose={() => setRolesFor(null)} title="分配角色" description={`${rolesFor?.nickname ?? ""}（${rolesFor?.username ?? ""}）`} footer={<><Button variant="ghost" onClick={() => setRolesFor(null)}>取消</Button><Button onClick={() => assignRoles.mutate()} disabled={selectedRoleIds.length === 0 || assignRoles.isPending}>保存角色</Button></>}>
