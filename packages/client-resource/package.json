@@ -1,0 +1,20 @@
+{
+  "name": "@neton/application-client-resource",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": { ".": "./src/index.tsx" },
+  "peerDependencies": {
+    "@neton/application-client-kit": "^1.0.0",
+    "@neton/application-client-runtime": "^1.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@neton/application-client-kit": "workspace:*",
+    "@neton/application-client-runtime": "workspace:*",
+    "@types/react": "^19.0.0",
+    "react": "^19.2.0",
+    "typescript": "^5.7.0"
+  }
+}

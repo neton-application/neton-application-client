@@ -1,24 +1,24 @@
 /**
  * 构建期模块注册表生成（NETON_APPLICATION_FRONT_SPEC §5 / §10）。
- * 读 apps/shell/front.modules.ts → 校验 manifest → 生成
- * apps/shell/src/generated/modules.generated.ts（静态 import()，Next 可分析拆包）。
+ * 读 apps/console/client.modules.ts → 校验 manifest → 生成
+ * apps/console/src/generated/modules.generated.ts（静态 import()，Next 可分析拆包）。
  * 任何校验失败即抛错中断构建。
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { FrontModuleManifest } from "@neton/application-front-contract";
+import type { FrontModuleManifest } from "@neton/application-client-contract";
 
 const SHELL_CONTRACT_MAJOR = 1;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const shellDir = path.resolve(here, "../apps/shell");
+const shellDir = path.resolve(here, "../apps/console");
 // 模块包必须从 shell 的依赖上下文解析（workspace 链接挂在 shell 下，不在仓库根）。
 const shellRequire = createRequire(path.join(shellDir, "package.json"));
 
 const { default: packages } = (await import(
-  pathToFileURL(path.join(shellDir, "front.modules.ts")).href
+  pathToFileURL(path.join(shellDir, "client.modules.ts")).href
 )) as { default: string[] };
 
 interface Loaded { pkg: string; manifest: FrontModuleManifest; }
@@ -62,7 +62,7 @@ const entries = loaded.flatMap(({ pkg, manifest }) =>
   manifest.pages.map((p) => `  ${JSON.stringify(p.key)}: () => import(${JSON.stringify(`${pkg}/pages/${p.entry}`)}),`),
 );
 const out = `/* 自动生成：pnpm registry（scripts/generate-registry.mts）。禁止手改。 */
-import type { FrontModuleManifest } from "@neton/application-front-contract";
+import type { FrontModuleManifest } from "@neton/application-client-contract";
 import type * as React from "react";
 
 export const installedModules: FrontModuleManifest[] = ${JSON.stringify(

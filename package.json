@@ -1,10 +1,10 @@
 {
-  "name": "neton-application-front",
+  "name": "neton-application-client",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter @neton/application-front-shell dev",
-    "build": "pnpm --filter @neton/application-front-shell build",
-    "typecheck": "pnpm registry && pnpm --filter @neton/application-front-shell typecheck",
+    "dev": "pnpm --filter @neton/application-client-console dev",
+    "build": "pnpm --filter @neton/application-client-console build",
+    "typecheck": "pnpm registry && pnpm --filter @neton/application-client-console typecheck",
     "registry": "tsx scripts/generate-registry.mts"
   },
   "devDependencies": {
