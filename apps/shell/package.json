@@ -21,7 +21,6 @@
     "@neton/application-front-resource": "workspace:*",
     "@neton/application-front-runtime": "workspace:*",
     "@neton/application-front-system": "file:../../../neton-application-front-system",
-    "@privchat/application-front-game": "file:../../../../privchat/privchat-application-front-game",
     "@tanstack/react-query": "^5.0.0",
     "lucide-react": "^1.24.0",
     "next": "^16.0.0",

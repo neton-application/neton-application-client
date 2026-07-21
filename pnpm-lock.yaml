@@ -50,9 +50,6 @@ importers:
       '@neton/application-front-system':
         specifier: file:../../../neton-application-front-system
         version: file:../neton-application-front-system(@neton/application-front-contract@packages+front-contract)(@neton/application-front-kit@packages+front-kit)(@neton/application-front-resource@packages+front-resource)(@neton/application-front-runtime@packages+front-runtime)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@privchat/application-front-game':
-        specifier: file:../../../../privchat/privchat-application-front-game
-        version: file:../../privchat/privchat-application-front-game(@tanstack/react-query@5.101.2(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)
       '@tanstack/react-query':
         specifier: ^5.0.0
         version: 5.101.2(react@19.2.7)
@@ -521,9 +518,6 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==, tarball: https://registry.npmmirror.com/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz}
 
-  '@neton/application-front-contract@file:packages/front-contract':
-    resolution: {directory: packages/front-contract, type: directory}
-
   '@neton/application-front-infra@file:../neton-application-front-infra':
     resolution: {directory: ../neton-application-front-infra, type: directory}
     peerDependencies:
@@ -531,12 +525,6 @@ packages:
       '@neton/application-front-kit': ^1.0.0
       '@neton/application-front-resource': ^1.0.0
       '@neton/application-front-runtime': ^1.0.0
-      react: ^19.0.0
-      react-dom: ^19.0.0
-
-  '@neton/application-front-kit@file:packages/front-kit':
-    resolution: {directory: packages/front-kit, type: directory}
-    peerDependencies:
       react: ^19.0.0
       react-dom: ^19.0.0
 
@@ -579,12 +567,6 @@ packages:
       '@neton/application-front-runtime': ^1.0.0
       react: ^19.0.0
       react-dom: ^19.0.0
-
-  '@neton/application-front-runtime@file:packages/front-runtime':
-    resolution: {directory: packages/front-runtime, type: directory}
-    peerDependencies:
-      '@tanstack/react-query': ^5.0.0
-      react: ^19.0.0
 
   '@neton/application-front-system@file:../neton-application-front-system':
     resolution: {directory: ../neton-application-front-system, type: directory}
@@ -650,9 +632,6 @@ packages:
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
-
-  '@privchat/application-front-game@file:../../privchat/privchat-application-front-game':
-    resolution: {directory: ../../privchat/privchat-application-front-game, type: directory}
 
   '@radix-ui/number@1.1.2':
     resolution: {integrity: sha512-ceTwaxc4I5IOi97DgCotl3pqiyRGvffcc0oOsE2dQYaJOFIDsDt4VWG6xEbg1QePv9QWausCEIppud/tJ1wNig==, tarball: https://registry.npmmirror.com/@radix-ui/number/-/number-1.1.2.tgz}
@@ -1619,11 +1598,6 @@ packages:
     resolution: {integrity: sha512-NXYBzinNrblfraPGyrbPoD19C1h9lfI/1mzgWYvXUTe414Gz/X1FD2XBZSZM7rRTrMA8JL3OtAaGifrIKhQ5yQ==, tarball: https://registry.npmmirror.com/lightningcss/-/lightningcss-1.32.0.tgz}
     engines: {node: '>= 12.0.0'}
 
-  lucide-react@0.468.0:
-    resolution: {integrity: sha512-6koYRhnM2N0GGZIdXzSeiNwguv1gt/FAjZOiPl76roBi3xKEXa4WmfpxgQwTTL4KipXjefrnf3oV4IsYhi4JFA==, tarball: https://registry.npmmirror.com/lucide-react/-/lucide-react-0.468.0.tgz}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
-
   lucide-react@1.24.0:
     resolution: {integrity: sha512-YT6mBD8lGKkg4nM39enlm94/sfJIiW0YKUT60fBy4YK8tai31ylg1VhGNWxkpSKHo9UagfnZqwIff3HTDQwXeA==, tarball: https://registry.npmmirror.com/lucide-react/-/lucide-react-1.24.0.tgz}
     peerDependencies:
@@ -2024,8 +1998,6 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.4.14
 
-  '@neton/application-front-contract@file:packages/front-contract': {}
-
   '@neton/application-front-infra@file:../neton-application-front-infra(@neton/application-front-contract@packages+front-contract)(@neton/application-front-kit@packages+front-kit)(@neton/application-front-resource@packages+front-resource)(@neton/application-front-runtime@packages+front-runtime)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@neton/application-front-contract': link:packages/front-contract
@@ -2034,17 +2006,6 @@ snapshots:
       '@neton/application-front-runtime': link:packages/front-runtime
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
-
-  '@neton/application-front-kit@file:packages/front-kit(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      class-variance-authority: 0.7.1
-      lucide-react: 1.24.0(react@19.2.7)
-      radix-ui: 1.6.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-    transitivePeerDependencies:
-      - '@types/react'
-      - '@types/react-dom'
 
   '@neton/application-front-member@file:../neton-application-front-member(@neton/application-front-contract@packages+front-contract)(@neton/application-front-kit@packages+front-kit)(@neton/application-front-resource@packages+front-resource)(@neton/application-front-runtime@packages+front-runtime)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
@@ -2082,11 +2043,6 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@neton/application-front-runtime@file:packages/front-runtime(@tanstack/react-query@5.101.2(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@tanstack/react-query': 5.101.2(react@19.2.7)
-      react: 19.2.7
-
   '@neton/application-front-system@file:../neton-application-front-system(@neton/application-front-contract@packages+front-contract)(@neton/application-front-kit@packages+front-kit)(@neton/application-front-resource@packages+front-resource)(@neton/application-front-runtime@packages+front-runtime)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@neton/application-front-contract': link:packages/front-contract
@@ -2121,19 +2077,6 @@ snapshots:
 
   '@next/swc-win32-x64-msvc@16.2.10':
     optional: true
-
-  '@privchat/application-front-game@file:../../privchat/privchat-application-front-game(@tanstack/react-query@5.101.2(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)':
-    dependencies:
-      '@neton/application-front-contract': file:packages/front-contract
-      '@neton/application-front-kit': file:packages/front-kit(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@neton/application-front-runtime': file:packages/front-runtime(@tanstack/react-query@5.101.2(react@19.2.7))(react@19.2.7)
-      lucide-react: 0.468.0(react@19.2.7)
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-    transitivePeerDependencies:
-      - '@tanstack/react-query'
-      - '@types/react'
-      - '@types/react-dom'
 
   '@radix-ui/number@1.1.2': {}
 
@@ -3104,10 +3047,6 @@ snapshots:
       lightningcss-linux-x64-musl: 1.32.0
       lightningcss-win32-arm64-msvc: 1.32.0
       lightningcss-win32-x64-msvc: 1.32.0
-
-  lucide-react@0.468.0(react@19.2.7):
-    dependencies:
-      react: 19.2.7
 
   lucide-react@1.24.0(react@19.2.7):
     dependencies:
