@@ -92,6 +92,18 @@ function resolveIcon(value?: string | null): LucideIcon {
   return iconMap[raw] ?? CircleDot;
 }
 
+/** 按 `group` 把连续同组的条目聚成段；相邻同名视为同一段，顺序完全由调用方决定。 */
+function groupNav(items: NavItem[]): Array<{ label: string | null; items: NavItem[] }> {
+  const sections: Array<{ label: string | null; items: NavItem[] }> = [];
+  for (const item of items) {
+    const label = item.group ?? null;
+    const last = sections[sections.length - 1];
+    if (last && last.label === label) last.items.push(item);
+    else sections.push({ label, items: [item] });
+  }
+  return sections;
+}
+
 function flattenNav(items: NavItem[], parents: string[] = []): FlatNavItem[] {
   const flat: FlatNavItem[] = [];
   for (const item of items) {
@@ -548,15 +560,25 @@ export function AppShell({
             {!sidebarCompact && <span>工作台</span>}
           </Link>
           <div className="space-y-0.5">
-            {items.map((item) => (
-              <NavBranch
-                key={item.path}
-                item={item}
-                depth={0}
-                collapsed={sidebarCompact}
-                onNavigate={() => setMobileOpen(false)}
-                onExpand={() => setCollapsed(false)}
-              />
+            {groupNav(items).map((section, index) => (
+              <div key={section.label ?? `g${index}`} className={index > 0 ? "pt-4" : undefined}>
+                {/* 收起时不显示组名：16px 宽度放不下，留着只会变成噪音 */}
+                {section.label && !sidebarCompact && (
+                  <div className="px-3 pb-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                    {section.label}
+                  </div>
+                )}
+                {section.items.map((item) => (
+                  <NavBranch
+                    key={item.path}
+                    item={item}
+                    depth={0}
+                    collapsed={sidebarCompact}
+                    onNavigate={() => setMobileOpen(false)}
+                    onExpand={() => setCollapsed(false)}
+                  />
+                ))}
+              </div>
             ))}
           </div>
         </nav>
