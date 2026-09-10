@@ -19,7 +19,8 @@
     "lucide-react": "^1.24.0",
     "next": "^16.0.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@neton/application-front-workspace": "file:../../../neton-application-front/packages/front-workspace"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
