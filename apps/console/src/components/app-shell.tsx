@@ -54,12 +54,15 @@ import {
   UsersRound,
   Wrench,
   X,
+  KeyRound,
 } from "lucide-react";
 import type { NavItem } from "@neton/application-client-runtime/menu";
 import type { PermissionInfo } from "@neton/application-client-runtime/types";
 import { FrontClientProvider, useQueryClient } from "@neton/application-client-runtime/client-context";
 import { cn } from "@neton/application-client-kit";
+import { memberInitial } from "@neton/application-client-runtime/types";
 import { BrandMark } from "./brand-mark";
+import { useSiteBrand } from "./site-brand";
 
 type FrontUser = PermissionInfo["user"];
 
@@ -74,6 +77,7 @@ const iconMap: Record<string, LucideIcon> = {
   setting: Settings,
   tool: Wrench,
   user: UserRound,
+  lock: KeyRound,
   team: UsersRound,
   menu: Menu,
   apartment: Network,
@@ -181,7 +185,7 @@ function NavBranch({
           "relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-foreground)]",
           depth > 0 && "py-1.5",
           active
-              ? "bg-[var(--sidebar-accent)]/55 text-[var(--sidebar-foreground)]"
+              ? "bg-[var(--sidebar-accent)]/55 text-[var(--sidebar-foreground)] group-has-[a:hover]/nav:bg-transparent"
               : "text-[var(--muted-foreground)]",
           )}
         >
@@ -214,7 +218,7 @@ function NavBranch({
       className={cn(
         "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-colors",
         pathname === item.path
-          ? "bg-[var(--sidebar-active)] font-medium text-[var(--foreground)] before:absolute before:-left-[9px] before:h-4 before:w-[2px] before:rounded-full before:bg-[var(--foreground)]"
+          ? "bg-[var(--sidebar-active)] font-medium text-[var(--foreground)] group-has-[a:hover]/nav:[&:not(:hover)]:bg-transparent before:absolute before:-left-[9px] before:h-4 before:w-[2px] before:rounded-full before:bg-[var(--foreground)]"
           : "text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-foreground)]",
       )}
     >
@@ -474,11 +478,30 @@ export function AppShell({
   useWorkspaceLinkDelegation(pages);
   const current = flatItems.find((item) => item.path === pathname)
     ?? [...flatItems].sort((a, b) => b.path.length - a.path.length).find((item) => pathname.startsWith(`${item.path}/`));
+  const brand = useSiteBrand();
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [profileOpen, setProfileOpen] = React.useState(false);
   const [noticeOpen, setNoticeOpen] = React.useState(false);
+  const noticeRef = React.useRef<HTMLDivElement>(null);
+  const profileRef = React.useRef<HTMLDivElement>(null);
+  // 个人中心入口只在对应页面已装配时出现：发行版可以不装 client-member，菜单不能指向不存在的页面
+  const accountLinks = [
+    { to: "/member/profile", label: "个人资料", Icon: UserRound },
+    { to: "/member/password", label: "修改密码", Icon: KeyRound },
+  ].filter((link) => pages.some((page) => page.path === link.to));
+  // 点弹层外任意处关闭（按下时判定：等到 click 才关，拖选文字松手在外面也会误关）
+  React.useEffect(() => {
+    if (!profileOpen && !noticeOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (profileOpen && !profileRef.current?.contains(target)) setProfileOpen(false);
+      if (noticeOpen && !noticeRef.current?.contains(target)) setNoticeOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [profileOpen, noticeOpen]);
   const [fullscreen, setFullscreen] = React.useState(false);
   const [darkMode, setDarkMode] = React.useState(false);
 
@@ -534,7 +557,8 @@ export function AppShell({
     });
   }
 
-  const initials = (user.nickname || user.username || "N").slice(0, 1).toUpperCase();
+  // 展示名可能是打码手机号（短信注册没有昵称），取不到字母 / 汉字就显示用户图标
+  const initials = memberInitial(user) || <UserRound size={15} />;
   const activeInstance = instances.find((i) => i.instanceId === activeId);
   const activeTitle = activeInstance ? instanceTitle(activeInstance) : "页面";
   const trails = current?.trail
@@ -558,8 +582,10 @@ export function AppShell({
           <BrandMark className="h-8 w-8" />
           {!sidebarCompact && (
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold tracking-[-0.02em]">Neton</div>
-              <div className="mt-0.5 text-[10px] font-medium tracking-[0.14em] text-[var(--muted-foreground)]">CONTROL PLANE</div>
+              <div className="truncate text-sm font-semibold tracking-[-0.02em]">{brand.name}</div>
+              {brand.tagline && (
+                <div className="mt-0.5 truncate text-[10px] font-medium tracking-[0.14em] text-[var(--muted-foreground)]">{brand.tagline}</div>
+              )}
             </div>
           )}
           <button
@@ -572,7 +598,7 @@ export function AppShell({
           </button>
         </div>
 
-        <nav className={cn("min-h-0 flex-1 overflow-y-auto py-4", sidebarCompact ? "space-y-1 px-2" : "px-2.5")}>
+        <nav className={cn("group/nav min-h-0 flex-1 overflow-y-auto py-4", sidebarCompact ? "space-y-1 px-2" : "px-2.5")}>
           <WorkspaceLink
             to="/"
             onClick={() => setMobileOpen(false)}
@@ -678,7 +704,7 @@ export function AppShell({
             >
               {darkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
-            <div className="relative">
+            <div ref={noticeRef} className="relative">
               <button
                 type="button"
                 title="通知"
@@ -701,7 +727,7 @@ export function AppShell({
                 </div>
               )}
             </div>
-            <div className="relative ml-1 border-l border-[var(--border)] pl-3">
+            <div ref={profileRef} className="relative ml-1 border-l border-[var(--border)] pl-3">
               <button
                 type="button"
                 onClick={() => {
@@ -713,7 +739,7 @@ export function AppShell({
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--foreground)] text-xs font-semibold text-[var(--background)] shadow-[var(--shadow-xs)]">{initials}</span>
                 <span className="hidden min-w-0 text-left md:block">
                   <span className="block max-w-28 truncate text-xs font-semibold text-[var(--foreground)]">{user.nickname || user.username}</span>
-                  <span className="block max-w-28 truncate text-[9px] uppercase tracking-[0.1em] text-[var(--muted-foreground)]">{roles[0] || "operator"}</span>
+                  <span className="block max-w-28 truncate text-[9px] uppercase tracking-[0.1em] text-[var(--muted-foreground)]">{roles[0] || "会员"}</span>
                 </span>
                 <ChevronDown size={13} className="hidden text-[var(--muted-foreground)] md:block" />
               </button>
@@ -721,14 +747,21 @@ export function AppShell({
                 <div className="absolute right-0 top-12 z-[80] w-72 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--popover)] text-[var(--popover-foreground)] shadow-[var(--shadow-md)]">
                   <div className="flex items-center gap-3 p-4">
                     <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--foreground)] text-sm font-semibold text-[var(--background)]">{initials}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[var(--foreground)]">{user.nickname || user.username}</span><span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">@{user.username}</span></span>
-                    <span className="rounded-md bg-[var(--primary-soft)] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--primary)]">{roles[0] || "operator"}</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[var(--foreground)]">{user.nickname || user.username}</span>{user.username ? <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">@{user.username}</span> : null}</span>
+                    <span className="rounded-md bg-[var(--primary-soft)] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--primary)]">{roles[0] || "会员"}</span>
                   </div>
                   <div className="mx-3 flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted)] px-3 py-2.5">
                     <ShieldCheck size={15} className="text-[var(--primary)]" />
                     <span><span className="block text-[11px] font-medium text-[var(--foreground)]">安全会话已验证</span><span className="block text-[10px] text-[var(--muted-foreground)]">HttpOnly · Backend verified</span></span>
                   </div>
-                  <div className="mt-3 border-t border-[var(--border)] p-2">
+                  {accountLinks.length > 0 && (
+                    <div className="mt-3 border-t border-[var(--border)] p-2">
+                      {accountLinks.map(({ to, label, Icon }) => (
+                        <WorkspaceLink key={to} to={to} onClick={() => setProfileOpen(false)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-medium text-[var(--foreground)] transition hover:bg-[var(--muted)]"><Icon size={15} />{label}</WorkspaceLink>
+                      ))}
+                    </div>
+                  )}
+                  <div className={cn("border-t border-[var(--border)] p-2", accountLinks.length === 0 && "mt-3")}>
                     <button type="button" onClick={logout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-medium text-red-600 transition hover:bg-red-500/10"><LogOut size={15} />退出当前会话</button>
                   </div>
                 </div>
@@ -747,7 +780,7 @@ export function AppShell({
                炸掉整棵子树，比每次切换都重建更难发现。
           现在滚动容器下沉到每个实例内部（见 WorkspaceHost），所以这里不再 overflow-auto。
         */}
-        <main className="front-shell-main relative z-0 min-h-0 flex-1 overflow-hidden">
+        <main className="front-shell-main relative min-h-0 flex-1 overflow-hidden">
           <WorkspaceHost pages={pages} ui={ui} />
         </main>
       </div>
