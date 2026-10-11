@@ -12,7 +12,7 @@ import type { NavItem } from "@neton/application-client-runtime/menu";
 export const consoleNav: NavItem[] = [];
 
 /**
- * 二级页面：有入口、但不进侧栏 —— 从别的页面或右上角个人菜单点进去（例如 client-member 的
+ * 二级页面：有入口、但不进侧栏 —— 从别的页面或右上角个人菜单点进去（例如 client-account 的
  * 修改密码、绑定邮箱、绑定手机）。产品 fork 在这里写明每页从哪进，好让「装配了的页面都有入口」
  * 这件事可以被检查：既不在 consoleNav 也不在这里的页面，就只剩手敲 URL 一条路。
  */
