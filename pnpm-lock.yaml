@@ -130,6 +130,9 @@ importers:
       '@neton/application-client-contract':
         specifier: workspace:*
         version: link:../client-contract
+      '@neton/application-front-workspace':
+        specifier: file:../../../neton-application-front/packages/front-workspace
+        version: file:../neton-application-front/packages/front-workspace(react@19.3.0)
       '@tanstack/react-query':
         specifier: ^5.104.2
         version: 5.104.2(react@19.3.0)
