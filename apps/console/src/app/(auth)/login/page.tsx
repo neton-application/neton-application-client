@@ -5,12 +5,14 @@ import { ArrowRight, Check, Eye, EyeOff, Fingerprint, KeyRound, Moon, ShieldChec
 import { Alert, Button, Input, Label } from "@neton/application-client-kit";
 import { apiErrorFromEnvelope } from "@neton/application-client-runtime/client";
 import { useDescribeError } from "@neton/application-client-runtime/errors";
+import { useCaptcha } from "@neton/application-client-runtime/captcha-widget";
 import { BrandMark } from "@/components/brand-mark";
 import { useSiteBrand } from "@/components/site-brand";
 
 export default function LoginPage() {
   const brand = useSiteBrand();
   const describeError = useDescribeError("account");
+  const captcha = useCaptcha(brand.captcha, "login");
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [passwordVisible, setPasswordVisible] = React.useState(false);
@@ -37,7 +39,7 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...captcha.headers },
         body: JSON.stringify({ username, password }),
       });
       const body = await res.json();
@@ -46,8 +48,10 @@ export default function LoginPage() {
         return;
       }
       setError(describeError(apiErrorFromEnvelope(body, res.status, res.headers)));
+      captcha.reset();
     } catch {
       setError("无法连接到管理服务，请稍后重试");
+      captcha.reset();
     } finally {
       setPending(false);
     }
@@ -137,7 +141,8 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
-                <Button type="submit" className="group mt-2 h-11 w-full gap-2 text-sm" disabled={pending || !username || !password}>
+                {captcha.widget}
+                <Button type="submit" className="group mt-2 h-11 w-full gap-2 text-sm" disabled={pending || !username || !password || !captcha.ready}>
                   {pending ? "正在验证…" : "安全登录"}
                   {!pending && <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />}
                 </Button>
