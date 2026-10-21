@@ -14,6 +14,7 @@
  */
 
 import * as React from "react";
+import { formatMessage } from "./format-message";
 import { setFormatLocale } from "./types";
 
 export type Messages = Record<string, string>;
@@ -53,34 +54,8 @@ export function resolveInitialLocale(config: I18nConfig): string {
   return config.defaultLocale;
 }
 
-// ---------------------------------------------------------------------------
-// 模板
-
-/** 渲染一条模板。导出给测试与非 React 场景（如 manifest 标题）使用。 */
-export function formatMessage(template: string, params: Record<string, unknown> | undefined, locale: string): string {
-  if (!params) return template;
-  return template.replace(
-    /\{(\w+)(?:,\s*plural,\s*((?:[^{}]|\{[^{}]*\})*))?\}/g,
-    (whole, name: string, plural: string | undefined) => {
-      const value = params[name];
-      if (plural === undefined) return value === undefined || value === null ? whole : String(value);
-      const n = Number(value);
-      const options = parsePluralOptions(plural);
-      const exact = options[`=${n}`];
-      const category = new Intl.PluralRules(locale).select(n);
-      const chosen = exact ?? options[category] ?? options.other ?? "";
-      return chosen.replace(/#/g, new Intl.NumberFormat(locale).format(n));
-    },
-  );
-}
-
-function parsePluralOptions(body: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  const re = /(=?\w+)\s*\{([^{}]*)\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body))) out[m[1]] = m[2];
-  return out;
-}
+// 模板渲染在 format-message.ts（服务端翻译也用它，不能放在 "use client" 文件里）
+export { formatMessage } from "./format-message";
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -100,11 +75,17 @@ export function I18nProvider({
   config,
   registry = {},
   catalogs = {},
+  serverLocale = false,
   children,
 }: {
   config: I18nConfig;
   registry?: LocaleRegistry;
   catalogs?: StaticCatalogs;
+  /**
+   * 语言由服务端决定（公开页面，public-routes §12）：不读、不写本地记住的语言与浏览器偏好，
+   * 首次渲染与服务端 HTML 逐字节一致。词条应由服务端预先放进 [catalogs]，岛屿首帧就有译文。
+   */
+  serverLocale?: boolean;
   children: React.ReactNode;
 }) {
   const [locale, setLocaleState] = React.useState(config.defaultLocale);
@@ -113,7 +94,7 @@ export function I18nProvider({
   const [version, bump] = React.useReducer((n: number) => n + 1, 0);
 
   // 首次挂载后再读本地偏好：服务端渲染与静态导出都只认默认语言，避免水合不一致。
-  React.useEffect(() => { setLocaleState(resolveInitialLocale(config)); }, [config]);
+  React.useEffect(() => { if (!serverLocale) setLocaleState(resolveInitialLocale(config)); }, [config, serverLocale]);
   React.useEffect(() => {
     document.documentElement.lang = locale;
     setFormatLocale(locale, config.timeZone);
@@ -150,9 +131,9 @@ export function I18nProvider({
 
   const setLocale = React.useCallback((next: string) => {
     if (!config.locales.includes(next)) return;
-    window.localStorage.setItem(STORAGE_KEY, next);
+    if (!serverLocale) window.localStorage.setItem(STORAGE_KEY, next);
     setLocaleState(next);
-  }, [config.locales]);
+  }, [config.locales, serverLocale]);
 
   const value = React.useMemo<I18nState>(
     () => ({ config, locale, setLocale, lookup, ensureNamespace, version }),

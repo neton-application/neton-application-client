@@ -1,0 +1,91 @@
+/**
+ * 底座 proxy（Next 16 的请求代理，public-routes §2、§4、§7.2、§13）的全部规则。生成的
+ * `public-proxy.generated.ts` 只给数据；这里不依赖任何模块代码，proxy 的打包入口保持很小。
+ *
+ * 顺序：
+ * 1. 内部地址（`~q` 查询段、`~gone` 410 页）不接受外部直接访问 → 404；
+ * 2. 控制台：没有会话 Cookie 直接 307 到 `/login?next=<原地址>`；有 Cookie 时把原地址放进请求头，
+ *    让受保护布局在会话失效时也能带上 next；
+ * 3. 旧 URL 形态（legacy）→ 308 到当前形态；
+ * 4. goneAware 路由且地址在已删除集合里 → 410（改写到内部 410 页，状态码 410）；
+ * 5. 带白名单查询参数的公开路由 → 改写到 `<路径>/~q/<规范编码>`（白名单外的参数丢掉，见 query.ts）。
+ */
+import { NextResponse, type NextRequest } from "next/server";
+import { isConsolePath, loginHref } from "../public/next-path";
+import { canonicalQuery, encodeQuerySegment, QUERY_SEGMENT } from "../public/query";
+import { buildPath, matchPattern } from "../public/route-pattern";
+import { goneStore } from "./gone";
+
+export const PATHNAME_HEADER = "x-neton-pathname";
+/** 内部 410 页的路径（底座 `(public)/~gone`）。 */
+export const GONE_PAGE = "/~gone";
+const SESSION_COOKIE = "neton_client_session";
+
+export interface PublicProxyRoute {
+  key: string;
+  pattern: string;
+  query: string[];
+  goneAware: boolean;
+}
+
+export interface PublicProxyConfig {
+  consoleBasePath: string;
+  /** 所有公开路由与 fork 页面（含实例） */
+  routes: PublicProxyRoute[];
+  /** 旧形态 → 当前形态（参数名集合相同） */
+  legacy: { from: string; to: string }[];
+  /** 控制台前缀为空时，这些路径不属于控制台（登录注册页、接口、SEO 文件） */
+  nonConsole: string[];
+}
+
+function underAny(pathname: string, prefixes: readonly string[]): boolean {
+  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isInternal(pathname: string): boolean {
+  return pathname.split("/").some((s) => s === QUERY_SEGMENT || s === GONE_PAGE.slice(1));
+}
+
+export function createPublicProxy(config: PublicProxyConfig) {
+  const portal = config.consoleBasePath !== "";
+
+  return async function publicProxy(request: NextRequest): Promise<NextResponse> {
+    const { pathname, search } = request.nextUrl;
+
+    if (isInternal(pathname)) return new NextResponse(null, { status: 404 });
+
+    const inConsole = portal ? isConsolePath(pathname, config.consoleBasePath) : !underAny(pathname, config.nonConsole);
+    if (inConsole) {
+      if (!request.cookies.get(SESSION_COOKIE)?.value) {
+        return NextResponse.redirect(new URL(loginHref(`${pathname}${search}`, config.consoleBasePath), request.url), 307);
+      }
+      const forwarded = new Headers(request.headers);
+      forwarded.set(PATHNAME_HEADER, `${pathname}${search}`);
+      return NextResponse.next({ request: { headers: forwarded } });
+    }
+    if (!portal) return NextResponse.next();
+
+    for (const { from, to } of config.legacy) {
+      const params = matchPattern(from, pathname);
+      if (params) return NextResponse.redirect(new URL(`${buildPath(to, params)}${search}`, request.url), 308);
+    }
+
+    for (const route of config.routes) {
+      if (!matchPattern(route.pattern, pathname)) continue;
+      if (route.goneAware && (await goneStore().has(pathname))) {
+        return NextResponse.rewrite(new URL(GONE_PAGE, request.url), { status: 410 });
+      }
+      if (route.query.length && search) {
+        const canonical = canonicalQuery(request.nextUrl.searchParams, route.query);
+        if (canonical) {
+          const target = new URL(request.url);
+          target.pathname = `${pathname === "/" ? "" : pathname}/${QUERY_SEGMENT}/${encodeQuerySegment(canonical)}`;
+          target.search = "";
+          return NextResponse.rewrite(target);
+        }
+      }
+      return NextResponse.next();
+    }
+    return NextResponse.next();
+  };
+}

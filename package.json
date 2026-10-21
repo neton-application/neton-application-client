@@ -4,11 +4,15 @@
   "scripts": {
     "dev": "pnpm --filter @neton/application-client-console dev",
     "build": "pnpm --filter @neton/application-client-console build",
-    "typecheck": "pnpm registry && pnpm --filter @neton/application-client-console typecheck",
+    "typecheck": "pnpm registry && pnpm check:locales && pnpm --filter @neton/application-client-console typecheck && pnpm --filter @neton/application-client-runtime typecheck && pnpm --filter @neton/application-client-resource typecheck",
     "registry": "tsx scripts/generate-registry.mts",
-    "test": "pnpm --filter @neton/application-client-runtime test"
+    "check:locales": "tsx scripts/check-locales.mts",
+    "test": "tsx --test \"scripts/**/*.test.mts\" && pnpm --filter @neton/application-client-runtime test"
   },
   "devDependencies": {
+    "@neton/application-client-contract": "workspace:*",
+    "@neton/application-client-runtime": "workspace:*",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "turbo": "^2.11.8",
     "typescript": "^7.0.2"
