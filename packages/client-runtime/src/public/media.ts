@@ -65,16 +65,21 @@ export type MediaLoader = (input: MediaLoaderInput) => MediaLoaderOutput;
 
 /**
  * 缺省加载器：用后端给的宽度档。`src` 取不小于 2× 展示宽度的最小一档（高分屏清晰、又不过大），
- * 没有就取最大的一档；`srcset` 列出全部宽度档，由浏览器按 `sizes` 选。没有派生规格时只给原图。
+ * 没有就取最大的一档。`srcset` 只列**这张图用得上的**档位：从不小于展示宽度一半的最小一档（小屏上按 `sizes`
+ * 缩窄时的 1×）到 `src` 那一档（2×）——列表缩略图（展示 180）只有 180、360 两档，正文图（展示 720）是
+ * 360–1440。每个档位都是一条完整的签名地址，全部列出会让 HTML 与 RSC 载荷各多出几百字节一张图，
+ * 而且签名几乎不可压缩（一页 60 张卡片就是几十 KB）。没有派生规格时只给原图。
  */
 export const defaultMediaLoader: MediaLoader = ({ media, displayWidth }) => {
   const available = MEDIA_VARIANT_WIDTHS.filter((w) => media.variants?.[variantKey(w)]);
   if (!available.length) return { src: media.url };
   const target = displayWidth * 2;
   const chosen = available.find((w) => w >= target) ?? available[available.length - 1]!;
+  const smallest = available.find((w) => w * 2 >= displayWidth) ?? chosen;
+  const listed = available.filter((w) => w >= smallest && w <= chosen);
   return {
     src: media.variants![variantKey(chosen)]!,
-    srcSet: available.map((w) => `${media.variants![variantKey(w)]} ${w}w`).join(", "),
+    srcSet: listed.map((w) => `${media.variants![variantKey(w)]} ${w}w`).join(", "),
     variant: variantKey(chosen),
   };
 };
