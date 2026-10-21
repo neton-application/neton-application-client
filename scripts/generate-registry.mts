@@ -73,7 +73,12 @@ const previousRoutes = existsSync(routesJsonPath)
   ? (JSON.parse(await readFile(routesJsonPath, "utf8")) as { routes: Record<string, string> }).routes
   : null;
 
-const result = plan({ modules, site, sitePageEntries, previousRoutes, resolvable: (s) => resolveSpecifier(s) !== null });
+// 410 页的文案取宿主 `site` 命名空间（站点语言，缺失回退 zh-CN）
+const { siteCatalogs } = (await import(pathToFileURL(path.join(shellDir, "src/site/messages.ts")).href)) as { siteCatalogs: Record<string, Record<string, Record<string, string>>> };
+const siteMessages = { ...siteCatalogs.site?.["zh-CN"], ...siteCatalogs.site?.[site.locale] };
+const goneTexts = { title: siteMessages["status.gone.title"] ?? "410", body: siteMessages["status.gone.body"] ?? "", home: siteMessages["status.home"] ?? "/" };
+
+const result = plan({ modules, site, sitePageEntries, previousRoutes, goneTexts, resolvable: (s) => resolveSpecifier(s) !== null });
 if (result.errors.length) die(result.errors);
 
 // ---- 禁止 import 扫描（§5）：服务端入口及其相对 import ----

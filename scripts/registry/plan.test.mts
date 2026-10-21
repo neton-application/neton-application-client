@@ -22,6 +22,7 @@ function input(overrides: Partial<PlanInput> & { site?: SiteConfig; modules?: Pl
     sitePageEntries: overrides.sitePageEntries ?? [],
     previousRoutes: overrides.previousRoutes ?? null,
     resolvable: overrides.resolvable ?? (() => true),
+    goneTexts: { title: "Gone", body: "Removed for good.", home: "Home" },
   };
 }
 
@@ -42,6 +43,7 @@ test("a module route generates a plain and a query-variant route file with a sen
   assert.match(variant, /return \[\{"code":"-","_q":"_"\}\];/);
   assert.deepEqual(out.routesJson, { "filter.channel": "/channel/:code" });
   assert.match(out.files["src/generated/public-proxy.generated.ts"]!, /"goneAware": true/);
+  assert.match(out.files["src/generated/public-proxy.generated.ts"]!, /<meta name=\\"robots\\" content=\\"noindex\\">/);
   assert.ok(out.files["src/app/(console)/my/layout.tsx"]!.includes("export const instant = false;"));
 });
 

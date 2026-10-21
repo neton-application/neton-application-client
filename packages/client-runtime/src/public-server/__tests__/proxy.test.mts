@@ -13,6 +13,7 @@ const proxy = createPublicProxy({
   ],
   legacy: [{ from: "/c/:code", to: "/channel/:code" }],
   nonConsole: ["/login", "/api"],
+  goneHtml: "<!DOCTYPE html><title>Gone</title>",
 });
 
 const req = (path: string, cookie?: string) => new NextRequest(`https://www.example.com${path}`, { headers: cookie ? { cookie } : {} });
@@ -31,7 +32,6 @@ test("console with a cookie passes the original address to the layout", async ()
 
 test("internal segments are not reachable from outside", async () => {
   assert.equal((await proxy(req("/channel/latest/~q/abc"))).status, 404);
-  assert.equal((await proxy(req("/~gone"))).status, 404);
 });
 
 test("whitelisted query moves into the path, everything else is dropped", async () => {
@@ -47,10 +47,11 @@ test("legacy shapes 308 to the current shape", async () => {
   assert.equal(res.headers.get("location"), "https://www.example.com/channel/latest?cursor=1");
 });
 
-test("deleted URLs of goneAware routes are rewritten to the 410 page", async () => {
+test("deleted URLs of goneAware routes answer 410 with the static noindex page", async () => {
   await goneStore().add(["/channel/old"]);
   const res = await proxy(req("/channel/old"));
   assert.equal(res.status, 410);
-  assert.equal(res.headers.get("x-middleware-rewrite"), "https://www.example.com/~gone");
+  assert.equal(res.headers.get("x-robots-tag"), "noindex");
+  assert.equal(await res.text(), "<!DOCTYPE html><title>Gone</title>");
   assert.equal((await proxy(req("/channel/live"))).status, 200);
 });

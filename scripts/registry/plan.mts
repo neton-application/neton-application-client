@@ -25,7 +25,7 @@ import {
   parsePattern,
   sentinelParam,
 } from "@neton/application-client-runtime/public";
-import { QUERY_SEGMENT, reservedPrefixes, robotsDisallow, type ResolvedSite } from "@neton/application-client-runtime/public";
+import { goneHtml, QUERY_SEGMENT, reservedPrefixes, robotsDisallow, type ResolvedSite } from "@neton/application-client-runtime/public";
 
 export const SHELL_CONTRACT = { major: 1, minor: 1 } as const;
 /** 查询变体路由里装编码查询串的参数名（与 runtime public-server/route.tsx 的 QUERY_PARAM 一致）。 */
@@ -42,6 +42,8 @@ export interface PlanInput {
   previousRoutes: Record<string, string> | null;
   /** 入口能否解析（`<pkg>/public/x`）；fork 页面入口用 sitePageEntries 判断 */
   resolvable: (specifier: string) => boolean;
+  /** 站点语言下的 410 页文案（宿主 `site` 命名空间的 status.gone.* 与 status.home） */
+  goneTexts: { title: string; body: string; home: string };
 }
 
 export interface PlannedRoute {
@@ -462,6 +464,7 @@ export const proxyConfig: PublicProxyConfig = ${JSON.stringify({
     routes: proxyRoutes,
     legacy: legacy.map(({ from, to }) => ({ from, to })),
     nonConsole: ["/login", "/register", "/forgot-password", "/api", "/robots.txt", "/sitemap.xml", "/sitemaps", "/rss.xml", "/indexnow-key.txt", "/favicon.ico", "/.well-known"],
+    goneHtml: goneHtml({ locale: site.locale, siteName: site.brand.name, ...input.goneTexts }),
   }, null, 2)};
 `;
 

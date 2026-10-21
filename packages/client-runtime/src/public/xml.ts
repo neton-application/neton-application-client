@@ -78,3 +78,13 @@ export function robotsTxt(input: { origin: string; disallow: readonly string[] }
   const lines = ["User-agent: *", "Allow: /", ...disallow.map((p) => `Disallow: ${p}`), "", `Sitemap: ${input.origin}/sitemap.xml`, ""];
   return lines.join("\n");
 }
+
+/**
+ * 410 页（public-routes §7.2）：proxy 直接返回的独立静态文档，不经过渲染。生成期按站点语言写好；
+ * 只用内联样式，不依赖任何静态资源。
+ */
+export function goneHtml(input: { locale: string; siteName: string; title: string; body: string; home: string; color?: string }): string {
+  const e = escapeXml;
+  const color = /^#[0-9a-fA-F]{3,8}$/.test(input.color ?? "") ? input.color : "#111827";
+  return `<!DOCTYPE html><html lang="${e(input.locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${e(input.title)} · ${e(input.siteName)}</title><style>body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#111827;background:#fff}main{max-width:36rem;margin:0 auto;padding:6rem 1.5rem;text-align:center}h1{font-size:1.5rem;margin:0}p{color:#6b7280;line-height:1.6}a{display:inline-block;margin-top:1.5rem;padding:.6rem 1.25rem;border-radius:999px;background:${color};color:#fff;text-decoration:none}</style></head><body><main><h1>${e(input.title)}</h1><p>${e(input.body)}</p><a href="/">${e(input.home)}</a></main></body></html>`;
+}

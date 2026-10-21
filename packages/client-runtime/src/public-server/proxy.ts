@@ -3,11 +3,12 @@
  * `public-proxy.generated.ts` 只给数据；这里不依赖任何模块代码，proxy 的打包入口保持很小。
  *
  * 顺序：
- * 1. 内部地址（`~q` 查询段、`~gone` 410 页）不接受外部直接访问 → 404；
+ * 1. 内部地址（`~q` 查询段）不接受外部直接访问 → 404；
  * 2. 控制台：没有会话 Cookie 直接 307 到 `/login?next=<原地址>`；有 Cookie 时把原地址放进请求头，
  *    让受保护布局在会话失效时也能带上 next；
  * 3. 旧 URL 形态（legacy）→ 308 到当前形态；
- * 4. goneAware 路由且地址在已删除集合里 → 410（改写到内部 410 页，状态码 410）；
+ * 4. goneAware 路由且地址在已删除集合里 → 410：proxy 直接给出生成期写好的静态 410 页（noindex）。
+ *    不用「改写到一个 410 页面 + 状态码」：Next 16 不保证改写响应带上 proxy 给的状态码（实测时有时无）。
  * 5. 带白名单查询参数的公开路由 → 改写到 `<路径>/~q/<规范编码>`（白名单外的参数丢掉，见 query.ts）。
  */
 import { NextResponse, type NextRequest } from "next/server";
@@ -17,8 +18,6 @@ import { buildPath, matchPattern } from "../public/route-pattern";
 import { goneStore } from "./gone";
 
 export const PATHNAME_HEADER = "x-neton-pathname";
-/** 内部 410 页的路径（底座 `(public)/~gone`）。 */
-export const GONE_PAGE = "/~gone";
 const SESSION_COOKIE = "neton_client_session";
 
 export interface PublicProxyRoute {
@@ -36,14 +35,19 @@ export interface PublicProxyConfig {
   legacy: { from: string; to: string }[];
   /** 控制台前缀为空时，这些路径不属于控制台（登录注册页、接口、SEO 文件） */
   nonConsole: string[];
+  /** 410 页的完整 HTML（站点语言、noindex），生成期由站点词条写好 */
+  goneHtml: string;
 }
+
+/** 410 响应：缓存一天（与 gone 档一致），恢复上线时由失效端点的 revived 移出集合、CDN 由 site 模块刷新。 */
+export const GONE_CACHE_CONTROL = "public, s-maxage=86400, stale-while-revalidate=604800";
 
 function underAny(pathname: string, prefixes: readonly string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 function isInternal(pathname: string): boolean {
-  return pathname.split("/").some((s) => s === QUERY_SEGMENT || s === GONE_PAGE.slice(1));
+  return pathname.split("/").includes(QUERY_SEGMENT);
 }
 
 export function createPublicProxy(config: PublicProxyConfig) {
@@ -73,7 +77,10 @@ export function createPublicProxy(config: PublicProxyConfig) {
     for (const route of config.routes) {
       if (!matchPattern(route.pattern, pathname)) continue;
       if (route.goneAware && (await goneStore().has(pathname))) {
-        return NextResponse.rewrite(new URL(GONE_PAGE, request.url), { status: 410 });
+        return new NextResponse(config.goneHtml, {
+          status: 410,
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": GONE_CACHE_CONTROL, "X-Robots-Tag": "noindex" },
+        });
       }
       if (route.query.length && search) {
         const canonical = canonicalQuery(request.nextUrl.searchParams, route.query);
