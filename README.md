@@ -11,6 +11,9 @@
 | 导航 | 后端菜单驱动（RBAC） | 静态导航 `apps/console/src/config/console.nav.ts` |
 | 路由 | 全部受保护 | 受保护控制台 + `(public)` 公开路由组（产品 fork 自行添加） |
 
+公开路由（匿名可缓存的 SSR 门户页面、SEO、缓存失效、与控制台同域共存）的契约见
+[docs/spec/public-routes.md](docs/spec/public-routes.md)（Draft，未实现）。
+
 - `apps/console` — Next.js 壳：member 登录、模块 manifest 驱动的 catch-all 路由
 - `packages/client-contract` — 模块契约（manifest / 贡献点 / 版本协议）
 - `packages/client-runtime` — envelope HTTP client、member 会话、静态导航工具
