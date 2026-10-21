@@ -229,7 +229,8 @@ export const jsonLd = {
   },
 
   /**
-   * 新闻 / 文章。`headline` 超过 110 字符截断；`dateModified` 只在给出「线上版本更新时间」时输出——
+   * 新闻 / 文章（client-content §4.1 的 NewsArticle 字段表）。`headline` 按字素截到 110；`mainEntityOfPage` = canonical；
+   * `isBasedOn` 署名转载 / 综合的来源；`isAccessibleForFree: false` 标会员可见内容。`headline` 超过 110 字符截断；`dateModified` 只在给出「线上版本更新时间」时输出——
    * 不用行的 updatedAt 冒充（计数回写也会改它）。
    */
   article(input: {
@@ -238,7 +239,9 @@ export const jsonLd = {
     url: string;
     datePublished: string;
     dateModified?: string;
-    images?: string[];
+    /** 封面与正文图片（地址，或带宽高的 ImageObject）；Google 建议 16:9、4:3、1:1 各一张 */
+    images?: (string | { url: string; width?: number; height?: number })[];
+    description?: string;
     author?: { name: string; url?: string };
     publisher: { name: string; logo?: string };
     section?: string;
@@ -254,7 +257,8 @@ export const jsonLd = {
       mainEntityOfPage: input.url,
       datePublished: input.datePublished,
       dateModified: input.dateModified,
-      image: input.images,
+      description: input.description ? truncateGraphemes(input.description, DESCRIPTION_MAX) : undefined,
+      image: input.images?.map((img) => (typeof img === "string" ? img : compact({ "@type": "ImageObject", url: img.url, width: img.width, height: img.height }))),
       author: input.author ? compact({ "@type": "Person", name: input.author.name, url: input.author.url }) : undefined,
       publisher: compact({
         "@type": "Organization",

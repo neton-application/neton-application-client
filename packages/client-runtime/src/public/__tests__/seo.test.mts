@@ -51,3 +51,44 @@ test("article builder truncates headlines and omits absent fields", () => {
   assert.equal("dateModified" in a, false);
   assert.equal("image" in a, false);
 });
+
+test("article builder covers the NewsArticle field table", () => {
+  const a = jsonLd.article({
+    headline: "标题",
+    url: "https://www.example.com/article/1",
+    datePublished: "2026-10-01T08:00:00+08:00",
+    dateModified: "2026-10-02T08:00:00+08:00",
+    description: "摘要",
+    images: ["https://cdn/a.jpg", { url: "https://cdn/b.jpg", width: 1200, height: 675 }],
+    author: { name: "作者", url: "https://www.example.com/author/9" },
+    publisher: { name: "站点", logo: "https://www.example.com/logo.png" },
+    section: "手机",
+    keywords: ["5G", "芯片"],
+    commentCount: 12,
+    isAccessibleForFree: false,
+    basedOn: { url: "https://source.example/x", publisherName: "来源" },
+  }) as Record<string, any>;
+  assert.equal(a["@type"], "NewsArticle");
+  assert.equal(a.mainEntityOfPage, "https://www.example.com/article/1");
+  assert.equal(a.dateModified, "2026-10-02T08:00:00+08:00");
+  assert.equal(a.description, "摘要");
+  assert.deepEqual(a.image, ["https://cdn/a.jpg", { "@type": "ImageObject", url: "https://cdn/b.jpg", width: 1200, height: 675 }]);
+  assert.deepEqual(a.author, { "@type": "Person", name: "作者", url: "https://www.example.com/author/9" });
+  assert.deepEqual(a.publisher, { "@type": "Organization", name: "站点", logo: { "@type": "ImageObject", url: "https://www.example.com/logo.png" } });
+  assert.equal(a.articleSection, "手机");
+  assert.equal(a.keywords, "5G,芯片");
+  assert.equal(a.commentCount, 12);
+  assert.equal(a.isAccessibleForFree, false);
+  assert.deepEqual(a.isBasedOn, { "@type": "CreativeWork", url: "https://source.example/x", publisher: { "@type": "Organization", name: "来源" } });
+});
+
+test("article headlines are truncated by grapheme, never splitting a character", () => {
+  const a = jsonLd.article({ headline: "👍🏽".repeat(120), url: "u", datePublished: "d", publisher: { name: "E" } }) as Record<string, string>;
+  const graphemes = [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(a.headline)];
+  assert.equal(graphemes.length, 110);
+  assert.equal(graphemes.at(-1)!.segment, "…");
+  assert.ok(graphemes.slice(0, -1).every((g) => g.segment === "👍🏽"));
+  const b = jsonLd.article({ headline: "t", url: "u", datePublished: "d", publisher: { name: "E" } }) as Record<string, unknown>;
+  assert.equal("dateModified" in b, false, "dateModified is omitted, never faked with the row's updatedAt");
+  assert.equal("author" in b, false);
+});

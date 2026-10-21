@@ -45,11 +45,48 @@ export function assertCacheFitsMediaValidity(validitySeconds: number | undefined
   }
 }
 
+const MEDIA_VALIDITY = Symbol.for("neton.client.site.media-validity");
+type ValidityHolder = { [MEDIA_VALIDITY]?: number };
+
+/** 进程级共享对象（与已删除集合同理：proxy 与渲染上下文拿到的是同一个 `process`）。 */
+function validityHolder(): ValidityHolder {
+  return (typeof process === "object" && process ? process : globalThis) as unknown as ValidityHolder;
+}
+
+/**
+ * 运行期生效的签名有效期（秒）：启动时与后端 `GET /app/infra/media/policy` 交叉校验后设置
+ * （public-server/media-policy.ts，取站点配置与后端两者中较短的一个）。undefined = 媒体地址不过期。
+ */
+export function setEffectiveMediaValidity(seconds: number | undefined): void {
+  if (seconds !== undefined && (!Number.isFinite(seconds) || seconds <= 0)) throw new Error(`[site] invalid media validity ${seconds}`);
+  validityHolder()[MEDIA_VALIDITY] = seconds;
+}
+
+export function effectiveMediaValidity(): number | undefined {
+  return validityHolder()[MEDIA_VALIDITY];
+}
+
+/**
+ * 把会渲染媒体的档位收紧到「revalidate ≤ 有效期 / 2」（纯函数）。构建期的 [assertCacheFitsMediaValidity]
+ * 保证站点配置与档位一致；这里兜住运行期才发现的不一致（后端的签名有效期比站点配置短）。
+ */
+export function clampProfileToMedia(name: PublicCacheProfileName, validitySeconds: number | undefined): CacheProfile {
+  const profile: CacheProfile = PUBLIC_CACHE_PROFILES[name];
+  if (validitySeconds === undefined || !MEDIA_PROFILES.includes(name)) return profile;
+  const limit = Math.max(1, Math.floor(validitySeconds / 2));
+  return profile.revalidate <= limit ? profile : { ...profile, revalidate: limit };
+}
+
+/** 运行期使用的档位：调用 `cacheLife` 与输出 `Cache-Control` 的地方一律经它取（不直接读常量）。 */
+export function cacheProfile(name: PublicCacheProfileName): CacheProfile {
+  return clampProfileToMedia(name, effectiveMediaValidity());
+}
+
 /**
  * Route Handler（sitemap、RSS、robots）自己设的 `Cache-Control`，与 Next 给页面生成的同一形式：
  * `s-maxage = revalidate`、`stale-while-revalidate = expire - revalidate`。
  */
 export function cacheControlFor(name: PublicCacheProfileName): string {
-  const p = PUBLIC_CACHE_PROFILES[name];
+  const p = cacheProfile(name);
   return `public, s-maxage=${p.revalidate}, stale-while-revalidate=${p.expire - p.revalidate}`;
 }

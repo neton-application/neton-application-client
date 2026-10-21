@@ -11,3 +11,5 @@ export * from "./tags";
 export * from "./types";
 export * from "./xml";
 export * from "./site";
+export * from "./media";
+export * from "./media-image";

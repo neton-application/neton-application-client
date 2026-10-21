@@ -1,4 +1,4 @@
-import { PUBLIC_CACHE_PROFILES } from "@neton/application-client-runtime/public";
+import { cacheProfile } from "@neton/application-client-runtime/public";
 import { cacheLife, cacheTag } from "next/cache";
 import {
   absoluteUrl,
@@ -45,7 +45,7 @@ const notFound = () => new Response("Not found", { status: 404, headers: { "Cont
 
 export async function sitemapIndexBody(): Promise<string> {
   "use cache";
-  cacheLife(PUBLIC_CACHE_PROFILES.list);
+  cacheLife(cacheProfile("list"));
   const entries: { loc: string; lastmod?: number | string }[] = [];
   for (const contribution of sitemapRegistry) {
     const shards = await contribution.definition.shards(await feedContext(contribution.namespace));
@@ -63,11 +63,11 @@ export async function sitemapIndexResponse(): Promise<Response> {
 export async function sitemapShardBody(contributionId: string, shardId: string): Promise<string | null> {
   "use cache";
   const contribution = sitemapRegistry.find((s) => s.id === contributionId);
-  if (!contribution) { cacheLife(PUBLIC_CACHE_PROFILES.list); return null; }
+  if (!contribution) { cacheLife(cacheProfile("list")); return null; }
   const ctx = await feedContext(contribution.namespace);
   const shard = (await contribution.definition.shards(ctx)).find((s) => s.id === shardId);
-  if (!shard) { cacheLife(PUBLIC_CACHE_PROFILES.list); return null; }
-  cacheLife(shard.immutable ? PUBLIC_CACHE_PROFILES.static : PUBLIC_CACHE_PROFILES.list);
+  if (!shard) { cacheLife(cacheProfile("list")); return null; }
+  cacheLife(cacheProfile(shard.immutable ? "static" : "list"));
   const result = await contribution.definition.urls(shardId, ctx);
   if (!result) return null;
   const tags = normalizeTags(result.tags ?? []);
@@ -79,7 +79,7 @@ export async function sitemapShardBody(contributionId: string, shardId: string):
 
 export async function newsSitemapBody(): Promise<string | null> {
   "use cache";
-  cacheLife(PUBLIC_CACHE_PROFILES.list);
+  cacheLife(cacheProfile("list"));
   const contributions = sitemapRegistry.filter((s) => s.news && s.definition.news);
   if (!contributions.length) return null;
   const urls = [];
@@ -107,7 +107,7 @@ export async function sitemapFileResponse(file: string): Promise<Response> {
 /** 站点 feed（/rss.xml）：聚合所有 `site: true` 的贡献，按时间合并，前 50 条。 */
 export async function siteFeedBody(): Promise<string | null> {
   "use cache";
-  cacheLife(PUBLIC_CACHE_PROFILES.list);
+  cacheLife(cacheProfile("list"));
   if (!siteFeedRegistry.length || !site.feeds.site) return null;
   const items: FeedItem[] = [];
   for (const contribution of siteFeedRegistry) {
@@ -137,7 +137,7 @@ export async function siteFeedResponse(): Promise<Response> {
 
 /** 模块 feed（生成的路由文件在自己的 `"use cache"` 函数里调它）。 */
 export async function renderFeed(feed: FeedDefinition, meta: { id: string; namespace: string; pattern: string; params: Record<string, PublicParamRule> }, rawParams: Record<string, string>): Promise<string | null> {
-  cacheLife(PUBLIC_CACHE_PROFILES.list);
+  cacheLife(cacheProfile("list"));
   const params = validateParams(rawParams, meta.params);
   if (!params) return null;
   const result = await feed.load({ ...(await feedContext(meta.namespace)), params });
