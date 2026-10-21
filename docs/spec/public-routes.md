@@ -186,8 +186,9 @@ interface PublicRouteContext {
   backend: PublicBackend;           // §5
   t: ServerTranslator;              // §12，按模块命名空间
   href(routeKey: string, params?: Record<string, string>): string | null;   // 按站点配置生成路径；路由未装配返回 null
+  path: string;                     // 当前页面的规范路径：按路由形态与路径参数生成，不含查询串，实例的固定参数不在路径里（运行时 pathOf()）
 }
-// Page 的 ctx 另有 renderSlot(target, { objectRef, summary }) 与 renderCards(cards, { styles, eagerImages })（§10）
+// Page 的 ctx 另有 renderSlot(target, { objectRef, summary }) 与 renderCards(cards, { styles, eagerImages, priorityFirst })（§10）
 ```
 
 `load` 是缓存单元：生成的路由文件里模块作用域的 `"use cache"` 函数以 `(规范化 params, 白名单 query)` 为键缓存它的结果（路由 key 与 locale 是该文件与部署的常量），按返回的 `tags` 打标签、按结果类型选档位（§8.1）。`"use cache"` 必须写在路由文件里而不是运行时包里：缓存函数只能闭包住可序列化的值，路由定义里有函数。`Page` 不得再自行取数（需要的数据都在 `load` 里取齐，避免一页里出现多个缓存时效不一的主内容）；插槽有各自的缓存单元（§10.2）。
@@ -421,12 +422,14 @@ src/app/(public)/(modules)/…         生成：模块公开路由与模块 feed
 | `console.header.actions` | 底座（控制台） | — | 「回复我的」红点 |
 
 - `summary` 是对象详情里取到的对外信息（`capabilities`、计数、`link.web`），贡献方据 `capability` 过滤，**不能**拿它代替后端的授权检查。
-- 渲染方式：`server` 是服务端组件，自己负责缓存（`"use cache"` + 标签）；`client` 是客户端岛（`"use client"`，首屏按匿名态渲染）。「服务端出首屏（可收录）+ 客户端接管交互」就是一个 server 组件里渲染一个以服务端数据为初始值的 client 组件，不单列 `hybrid`。贡献方拿到的参数是 `{ objectRef, summary, locale }`（server 另有 `site`）。
+- 渲染方式：`server` 是服务端组件，自己负责缓存（`"use cache"` + 标签）；`client` 是客户端岛（`"use client"`，首屏按匿名态渲染）。「服务端出首屏（可收录）+ 客户端接管交互」就是一个 server 组件里渲染一个以服务端数据为初始值的 client 组件，不单列 `hybrid`。
+- 贡献方的入参（运行时导出类型）：`ClientSlotProps = { objectRef, summary, locale }`；`ServerSlotProps` 另有 `site` 与 `href(routeKey, params)`（与页面 `ctx.href` 相同，贡献方互链不写死 URL）。客户端岛拿不到 `href`：需要的链接由 server 贡献算好作为 props 传下去。
+- `summary` 里的对外计数 `commentCount`、`favoriteCount`、`viewCount`（可选）由拥有对象的模块在详情里给出，缓存时效内允许滞后；贡献方只用来显示，实时数在水合后自己取。
 - 一个插槽里多个贡献按站点配置 `slots.order[target]` 列出的顺序在前，其余按 `order`（缺省 100）再按 id；`slots.hide` 隐藏。server 贡献抛错时记日志、渲染为空；client 贡献包在错误边界里。都不让整页 500。
 
 ### 10.3 卡片渲染器
 
-列表、首页楼层、筛选器卡片流（`/app/channel/{code}` 返回的 `Card`）里的对象按 `ref.type` 选渲染器：模块用 `cardRenderers` 注册（content 注册 `content.item`，comment 注册 `comment.comment`），没有渲染器的类型退回底座的 `ObjectSummary` 通用卡片（标题 + 摘要 + `link.web`，同源链接转站内路径）。渲染器是服务端组件，入参 `{ card, style, eager, ctx }`（`style` 来自挂载的 `cardStyle`；`eager` = 首屏前几张，图片不懒加载）。页面经 `ctx.renderCards(cards, { styles, eagerImages })` 调用。
+列表、首页楼层、筛选器卡片流（`/app/channel/{code}` 返回的 `Card`）里的对象按 `ref.type` 选渲染器：模块用 `cardRenderers` 注册（content 注册 `content.item`，comment 注册 `comment.comment`），没有渲染器的类型退回底座的 `ObjectSummary` 通用卡片（标题 + 摘要 + `link.web`，同源链接转站内路径）。渲染器是服务端组件，入参 `CardRendererProps = { card, style, eager, priority, ctx }`：`style` 来自挂载的 `cardStyle`（缺省 `auto`）；`eager` = 首屏前 `eagerImages` 张（缺省 3），图片不懒加载；`priority` = 页面的 LCP 图，只在 `priorityFirst: true` 时给第一张（缺省 false）。页面经 `ctx.renderCards(cards, { styles, eagerImages, priorityFirst })` 调用：列表页、首页最新流把第一张设为 LCP 图；详情页的首图由页面自己给 `priority`，其下的卡片流不开 `priorityFirst`。
 
 ### 10.4 媒体图片（C2）
 
@@ -442,7 +445,8 @@ type PublicMedia = { fileId: string; url: string; mimeType?: string | null; widt
 | 渲染 | 服务端组件，输出一个普通 `<img>`，**没有客户端 JS**；不经 Next 的图片优化（缩放交给 CDN 的图片处理参数） |
 | 规格 | 后端按固定宽度档给出完整（已签名）地址 `variants`：`w180`、`w360`、`w720`、`w1080`、`w1440`（限宽、保持比例）与 `og`（1200×675）。`srcset` 列出全部宽度档；`src` 取不小于 2 × `displayWidth` 的最小一档；没有派生规格时只给原图 |
 | CLS | 一律带 `width` / `height`：原图宽高；只有比例时按 `aspect` 给名义尺寸，并用 CSS `aspect-ratio` + `object-fit: cover` 裁到该比例 |
-| 加载 | `priority`（详情首图、列表前几张、焦点图第一张）：`loading="eager"`、`fetchpriority="high"`，并经 React `preload()` 在 `<head>` 输出 `<link rel="preload" as="image" imagesrcset imagesizes>`；其余 `loading="lazy"`、`decoding="async"` |
+| 加载 | 三档。`priority`（页面的 LCP 图：详情首图、焦点图第一张、列表第一张）：`loading="eager"`、`fetchpriority="high"`，并经 React `preload()` 在 `<head>` 输出 `<link rel="preload" as="image" fetchpriority="high" imagesrcset imagesizes>`。`eager`（首屏内的其余图，如列表前几张）：只 `loading="eager"`，不提高优先级（React 对不懒加载的 `<img>` 自己会给一个普通优先级的预加载提示，不额外处理）。其余 `loading="lazy"`。非 priority 的图一律 `decoding="async"` |
+| 一页一张 LCP 图 | 同一次服务端渲染里只有第一张 `priority` 图生效（`React.cache` 按请求记账），之后的降级为 `eager`，开发环境告警。页面与卡片流同时要求时以文档顺序先渲染的为准；端到端测试断言整页只有一个高优先级图与一个高优先级预加载 |
 | 加载器 | 可替换：fork 覆盖 `src/site/media-loader.ts`（与 `portal-shell.tsx` 同一规则），由 `public-runtime` 在加载时 `setMediaLoader()`。地址仍由后端生成，网页端不能自己拼签名 |
 | 过期兜底 | 公开外框在 `<body>` 开头输出一段不依赖 React 的内联脚本（`MEDIA_REFRESH_SCRIPT`）：捕获阶段监听 `error`，对带 `data-neton-media` 的图片调一次 `GET /api/backend/app/infra/media/url/{fileId}?variant=`，去掉 `srcset` 换上新地址；每张图只重试一次 |
 | 分享图 | `shareImageUrl(media)`：有 `og` 规格用它（1200×675），否则原图 |
@@ -453,6 +457,30 @@ type PublicMedia = { fileId: string; url: string; mimeType?: string | null; widt
 ### 10.5 样式表
 
 门户与控制台各自一份样式表：公开页（PublicFrame）只加载 `src/site/public.css`——Tailwind 只扫描门户外壳与 fork 页面（`src/site`）、生成的公开路由、站点 404 与各模块的 `src/{public,cards,slots}`，加上共享的设计令牌 `src/styles/tokens.css`；控制台与登录注册页加载 `src/styles/console.css`（整个工作区与模块控制台页面）。门户专属样式（品牌色等）写在 fork 的 `src/site/portal.css`。字体一律系统字体栈，不加载网络字体。端到端测试断言公开页只有一个样式表且不含控制台规则（夹具门户 gzip 后约 4 KB）。
+
+### 10.6 首屏 JS 预算
+
+`next build` 之后由 console 的 `postbuild`（`scripts/check-bundle-budget.mts`，`pnpm budget` 可单独跑）检查，超出即构建失败。计量全部按 gzip，单位 KB = 1024 字节：
+
+- **框架底数**：`build-manifest.json` 的 `rootMainFiles`，每页都加载、与路由无关。`polyfillFiles` 是 nomodule 脚本，现代浏览器不加载，不计。
+- **路由自身**：该路由 `page_client-reference-manifest.js` 里 `entryJSFiles` 的并集（根布局、路由组布局、页面、边界组件），去掉框架底数。动态 import 的懒加载块不在首屏，不计。
+- 预算在 `apps/console/bundle-budget.ts`（产品 fork 可改；`NETON_BUNDLE_BUDGET_FILE` 换一份）：`shared` 卡框架底数；`public` 是 `(public)` 路由自身 JS 的缺省上限；`routes` 按路由覆盖（去掉路由组的写法，如 `/item/[id]`），也可以给控制台路由设上限，没列出的控制台、登录注册路由只报告。总量（底数 + 自身）只报告，不单独卡。预算里写了构建产物里没有的路由也算失败（防止改了路由形态后预算悄悄失效）。
+
+**为什么不卡总量**：框架底数本身就超过「文章页首屏 JS ≤ 100 KB、首页 ≤ 130 KB」这类总量目标，任何页面都达不到，而它不是模块或门户代码能改变的。底座端到端构建（Next 16.4.0 + React 19.3.0，Turbopack，2026-10-22 实测）的数据：
+
+| 块（build-manifest / client-reference manifest） | 内容 | gzip（kB = 1000 字节） |
+| --- | --- | --- |
+| 框架底数 | react-dom + scheduler | 71.9 kB |
+| | Next 路由（app-router 客户端） | 48.5 kB |
+| | React | 7.4 kB |
+| | Turbopack 运行时 | 3.9 kB |
+| | **合计** | **131.8 kB = 128.8 KiB** |
+| 公开路由自身 | 根布局 | 3.6 kB |
+| | 公开页 Provider（I18nProvider + 会话水合） | 4.4 kB（瘦身前 8.4 kB：曾导入运行时、控制台、门户的全部词条与模块注册表） |
+| | 页面 | 0.3 kB |
+| | **合计** | **8.3 kB = 8.1 KiB** |
+
+公开页树里没有 react-query、工作区、kit 或控制台代码。底座缺省（KiB）`shared: 135`（底数之上约 5% 给补丁升级）、`public: 20`。框架底数超限时先查根布局是否多引了东西；确属框架升级，在 `bundle-budget.ts` 里调高并附上新的实测数据。
 
 ## 11. robots、sitemap、RSS
 
@@ -494,8 +522,10 @@ export default defineSitemap({
 ## 12. 国际化
 
 - 第一版：公开页**每个部署一种语言**（`locales.prefix = "none"`），即站点配置的 `locales.default`；`<html lang>` 由服务端设置。
-- 服务端翻译：运行时 `createServerI18n()` → `getServerT(namespace, locale)`（读同一份模块语言包与宿主静态词条：运行时、`console`、`site`），公开页、插槽的服务端部分、sitemap / RSS 里的文案都用它。`pnpm check:locales` 检查各命名空间 key 集合与参数一致、已国际化模块的源码（控制台页面、公开路由、插槽、卡片、sitemap、feed）与宿主源码不得硬编码中文（行尾 `// i18n-exempt` 只给语言自称一类不该翻译的文字）。
+- 服务端翻译：运行时 `createServerI18n()` → `getServerT(namespace, locale)`（读同一份模块语言包与宿主静态词条：运行时、`console`、`site`），公开页、插槽的服务端部分、sitemap / RSS 里的文案都用它。`pnpm check:locales` 检查：各命名空间 key 集合与参数一致；已国际化模块的整个源码（`locales/` 与测试除外，含被公开页 import 的视图、正文渲染、客户端岛）与宿主源码不得硬编码中文（行尾 `// i18n-exempt` 只给语言自称一类不该翻译的文字）；模块公开页客户端岛里字面量 `t("…")` 的 key 必须是公开 key，且在语言包里存在。测试文件（`*.test.*`、`__tests__/`、`__fixtures__/`、`__mocks__/`）不检查。
 - 客户端岛：公开布局用服务端语言初始化 `I18nProvider`，不读 localStorage；只有一种语言时不显示语言切换。
+- 公开页只预载**公开 key**：模块命名空间里以 `public.` 或 `error.` 开头的 key（`catalogsFor(namespaces, locale, { publicKeysOnly: true })`），加上宿主的 `errors`（运行时错误码）与 `site`（门户）整份，都只取站点语言（及默认语言回退）。`PublicProviders` 不导入任何语言包或模块注册表，也不按需加载命名空间：控制台的词条与模块清单不进门户的客户端包。服务端翻译（`ctx.t`、`getServerT`）不受此限制，它不进 HTML。
+- 因此模块的公开页客户端岛（模块源码里 `"use client"` 且调用 `useT("<模块 id>")` 的文件，控制台页面 `pages/` 除外）只能用公开 key。客户端岛的其余文案由 server 组件翻译好作为 props 传入。
 - 预留：`prefix: "non-default"` 时非默认语言加前缀（`/en/...`），每条路由按语言生成、输出 `hreflang` 备选。契约里的 `ctx.locale`、`alternates.languages` 现在就有，到时不改接口。
 - 错误：公开页上的客户端岛同样用 `useDescribeError("<模块 id>")`；服务端 `load` 的错误不显示给用户（映射成状态码或抛出）。
 
@@ -530,7 +560,7 @@ export default defineSitemap({
 
 C1 验收（itwind-client 真实运行，Playwright 12/12）：首页 HTML 含完整主内容与元数据、首屏不靠客户端取数（只有一次 `/api/session`）；带与不带 Cookie 的 HTML 逐字节一致；未知频道与不合法参数 404、内部 `~q` 段 404、已删除地址 410（noindex）、恢复后 404；失效端点错签 / 无签 401、错标签 400、正确签名 200 且按 eventId 幂等；robots 与 sitemap 索引、分片可用；`/my/account/profile` 未登录 → `/login?next=…` → 短信验证码登录后回到原页；门户页上账密登录回到原页；`next=//evil.example` 被拒、落在控制台首页。底座自身：生成脚本与运行时单测 87 项。
 
-底座端到端测试（C2，`pnpm e2e`，24 项全绿）：夹具模块（`e2e/fixture-module`：无参数列表页 `/`、goneAware 对象页 + legacy 308 + 数据驱动 308、带查询白名单的列表页、dynamic 页、卡片渲染器、带 news 的 sitemap、站点与模块 feed）+ 进程内模拟后端（`e2e/mock-backend.mts`：签名校验的已删除台账、媒体策略与刷新、账密登录）+ 真实 `next build && next start`。覆盖：构建期 0 次后端请求；路由生成；SSR 正文、元数据、站点验证、JSON-LD；404 / 暂时下线 404 + noindex / 参数不合法不打后端；启动同步的台账首访即 410、页面层 gone 先 404 后 410、死链文件；数据驱动与 legacy 308；`~q` 顺序无关、剥 utm、canonical 带白名单、外部访问 `~q` 404；dynamic 恒 200 + noindex；失效端点的签名 / 时间戳 / 字段 / 限额 / 保留路径 / 重复 eventId，refresh 与 expire 对下一次响应的实际效果，gone / revived；缓存命中不打后端；robots、sitemap 索引 / 分片 / news、RSS、IndexNow；站点 404 与控制台守卫；公开页只有门户样式表；浏览器里的登录 `next` 跳回与开放重定向防护（`//evil`、`/\evil`、编码变体、外站、`/api/`）；过期图片的兜底刷新；带与不带 Cookie 的 HTML 逐字节一致；运行日志无错误。Next 16.4 已知行为：页面里的 `permanentRedirect` 输出两行相同的 `Location`（浏览器只在取值不同时报错），测试按每一行都等于目标校验。
+底座端到端测试（C2，`pnpm e2e`，26 项全绿）：夹具模块（`e2e/fixture-module`：无参数列表页 `/`、goneAware 对象页 + legacy 308 + 数据驱动 308、带查询白名单的列表页、dynamic 页、卡片渲染器、带 news 的 sitemap、站点与模块 feed）+ 进程内模拟后端（`e2e/mock-backend.mts`：签名校验的已删除台账、媒体策略与刷新、账密登录）+ 真实 `next build && next start`。覆盖：构建期 0 次后端请求；路由生成；SSR 正文、元数据、站点验证、JSON-LD；404 / 暂时下线 404 + noindex / 参数不合法不打后端；启动同步的台账首访即 410、页面层 gone 先 404 后 410、死链文件；数据驱动与 legacy 308；`~q` 顺序无关、剥 utm、canonical 带白名单、外部访问 `~q` 404；dynamic 恒 200 + noindex；失效端点的签名 / 时间戳 / 字段 / 限额 / 保留路径 / 重复 eventId，refresh 与 expire 对下一次响应的实际效果，gone / revived；缓存命中不打后端；robots、sitemap 索引 / 分片 / news、RSS、IndexNow；站点 404 与控制台守卫；公开页只有门户样式表；浏览器里的登录 `next` 跳回与开放重定向防护（`//evil`、`/\evil`、编码变体、外站、`/api/`）；带路径参数的模块 feed（生成的路由文件过 `next build` 类型检查、参数校验 404）；列表页整页只有一张高优先级图（焦点图与 `priorityFirst` 同时要求时第二张降级）、其后 `eager`、再后懒加载；首屏 JS 预算（§10.6）；过期图片的兜底刷新；带与不带 Cookie 的 HTML 逐字节一致；运行日志无错误。Next 16.4 已知行为：页面里的 `permanentRedirect` 输出两行相同的 `Location`（浏览器只在取值不同时报错），测试按每一行都等于目标校验。
 
 ## 16. 开放项（已关闭）
 
