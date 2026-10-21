@@ -107,6 +107,10 @@ async function main() {
     await check("hermetic build: next build makes no backend request", async () => {
       assert.deepEqual(wire.hits, [], `the build fetched: ${wire.hits.join(", ")}`);
     });
+    // postbuild 已经卡过一次；这里再跑一遍让预算进结果清单（public-routes §10.6）
+    await check("first-load JS within the bundle budget", async () => {
+      await run("pnpm", ["run", "budget"], fixtureEnv, root);
+    });
 
     // ---- 启动 ----
     backend = await startMockBackend({ port: backendPort, secret: SECRET });

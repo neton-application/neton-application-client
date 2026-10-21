@@ -7,6 +7,7 @@
     "typecheck": "pnpm registry && pnpm check:locales && pnpm --filter @neton/application-client-console typecheck && pnpm --filter @neton/application-client-runtime typecheck && pnpm --filter @neton/application-client-resource typecheck",
     "registry": "tsx scripts/generate-registry.mts",
     "check:locales": "tsx scripts/check-locales.mts",
+    "budget": "tsx scripts/check-bundle-budget.mts",
     "test": "tsx --test \"scripts/**/*.test.mts\" && pnpm --filter @neton/application-client-runtime test",
     "e2e": "tsx e2e/run.mts"
   },
