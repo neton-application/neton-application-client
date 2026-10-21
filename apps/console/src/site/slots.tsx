@@ -1,5 +1,5 @@
 import * as React from "react";
-import { selectSlotContributions, type ObjectRef, type ObjectSummary, type PublicSeoContext } from "@neton/application-client-runtime/public";
+import { selectSlotContributions, type ClientSlotProps, type ObjectRef, type ObjectSummary, type PublicSeoContext, type ServerSlotProps } from "@neton/application-client-runtime/public";
 import { slotRegistry } from "@/generated/public.generated";
 import { site } from "@/generated/site.generated";
 import { ClientSlotBoundary } from "./slot-boundary";
@@ -13,17 +13,18 @@ export function renderSlot(target: string, props: { objectRef: ObjectRef; summar
   if (!selected.length) return null;
   return selected.map((contribution) => {
     const entry = slotRegistry.find((s) => s.contribution === contribution)!;
-    const slotProps = { objectRef: props.objectRef, summary: props.summary, locale: ctx.locale };
+    const slotProps: ClientSlotProps = { objectRef: props.objectRef, summary: props.summary, locale: ctx.locale };
+    const serverProps: ServerSlotProps = { ...slotProps, site: ctx.site, href: ctx.href };
     return contribution.rendering === "server"
-      ? <ServerSlot key={contribution.id} id={contribution.id} Component={entry.Component} props={{ ...slotProps, site: ctx.site }} />
+      ? <ServerSlot key={contribution.id} id={contribution.id} Component={entry.Component} props={serverProps} />
       : <ClientSlotBoundary key={contribution.id} id={contribution.id}><entry.Component {...slotProps} /></ClientSlotBoundary>;
   });
 }
 
 /** 服务端贡献：直接调用组件函数，抛错时记日志、渲染为空（自己有自己的缓存单元与标签）。 */
-async function ServerSlot({ id, Component, props }: { id: string; Component: React.ComponentType<any>; props: Record<string, unknown> }) {
+async function ServerSlot({ id, Component, props }: { id: string; Component: React.ComponentType<any>; props: ServerSlotProps }) {
   try {
-    return await (Component as (p: Record<string, unknown>) => React.ReactNode | Promise<React.ReactNode>)(props);
+    return await (Component as (p: ServerSlotProps) => React.ReactNode | Promise<React.ReactNode>)(props);
   } catch (error) {
     console.error(`[site] slot ${id} failed: ${error instanceof Error ? error.message : String(error)}`);
     return null;

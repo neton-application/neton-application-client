@@ -42,6 +42,16 @@ test("attributes: intrinsic size, lazy by default, priority is eager + high", ()
   assert.equal(eager.loading, "eager");
   assert.equal(eager.fetchPriority, "high");
   assert.equal(eager.src, variants.w720);
+  const onscreen = mediaImageAttributes({ media: signed, alt: "A", eager: true }, defaultMediaLoader);
+  assert.equal(onscreen.loading, "eager", "eager: not lazy-loaded");
+  assert.equal(onscreen.fetchPriority, undefined, "eager: no raised priority");
+  assert.equal(onscreen.decoding, "async");
+});
+
+test("MediaImage: eager images get no raised priority (React's own preload hint stays at normal priority)", () => {
+  const html = renderToStaticMarkup(React.createElement(MediaImage, { media: signed, alt: "A", eager: true }));
+  assert.match(html, /loading="eager"/);
+  assert.doesNotMatch(html, /fetchpriority|fetchPriority/);
 });
 
 test("attributes: an aspect placeholder gives width/height even without the original size (no CLS)", () => {

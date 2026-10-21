@@ -97,6 +97,12 @@ export function resolveRequest(raw: RawParams, meta: Pick<PublicRouteMeta, "patt
   return { params: { ...params, ...meta.fixed }, query };
 }
 
+/** 页面的规范路径：按路由形态与路径参数生成（实例的固定参数不在路径里）。 */
+export function pathOf(meta: Pick<PublicRouteMeta, "pattern" | "fixed">, params: Record<string, string>): string {
+  const pathParams = Object.fromEntries(Object.entries(params).filter(([k]) => !(k in meta.fixed)));
+  return buildPath(meta.pattern, pathParams);
+}
+
 export function createPublicRuntime(deps: PublicRuntimeDeps) {
   const site = deps.site;
 
@@ -107,7 +113,7 @@ export function createPublicRuntime(deps: PublicRuntimeDeps) {
 
   async function seoContext(meta: PublicRouteMeta, request: ResolvedRequest): Promise<PublicSeoContext> {
     const [name, t] = await Promise.all([deps.brandName(), deps.i18n.getServerT(meta.namespace, site.locale)]);
-    return { params: request.params, query: request.query, locale: site.locale, site: { ...site, name }, t, href };
+    return { params: request.params, query: request.query, locale: site.locale, site: { ...site, name }, t, href, path: pathOf(meta, request.params) };
   }
 
   async function forwardedHeaders(meta: PublicRouteMeta): Promise<Record<string, string> | undefined> {
@@ -145,10 +151,7 @@ export function createPublicRuntime(deps: PublicRuntimeDeps) {
       return { request, result };
     }
 
-    function currentPath(request: ResolvedRequest): string {
-      const pathParams = Object.fromEntries(Object.entries(request.params).filter(([k]) => !(k in meta.fixed)));
-      return buildPath(meta.pattern, pathParams);
-    }
+    const currentPath = (request: ResolvedRequest): string => pathOf(meta, request.params);
 
     function seoInput(request: ResolvedRequest, siteName: string, feedTitle: string | undefined): SeoContext {
       return {

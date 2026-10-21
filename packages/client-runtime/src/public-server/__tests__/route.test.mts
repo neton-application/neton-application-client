@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveRequest } from "../route";
+import { pathOf, resolveRequest } from "../route";
 import { encodeQuerySegment, EMPTY_QUERY_SEGMENT } from "../../public/query";
 
 const home = { pattern: "/", params: {}, query: [], fixed: {} };
@@ -25,4 +25,10 @@ test("the build-time sentinel never resolves", () => {
 
 test("fixed instance parameters are merged after validation", () => {
   assert.deepEqual(resolveRequest({ code: "x" }, { ...channel, fixed: { type: "video" } }), { params: { code: "x", type: "video" }, query: {} });
+});
+
+test("ctx.path is the canonical path: no query, fixed instance parameters left out", () => {
+  assert.equal(pathOf(channel, { code: "tech" }), "/channel/tech");
+  assert.equal(pathOf({ pattern: "/video/:code", fixed: { type: "video" } }, { code: "x", type: "video" }), "/video/x");
+  assert.equal(pathOf(home, {}), "/");
 });

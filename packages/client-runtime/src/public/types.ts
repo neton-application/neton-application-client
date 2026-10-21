@@ -20,6 +20,10 @@ export interface ObjectSummary {
   cover?: { fileId: string } | null;
   link?: ObjectLink;
   capabilities?: string[];
+  /** 对外计数（拥有对象的模块在详情里给出，缓存时效内允许滞后；没有的计数省略） */
+  commentCount?: number;
+  favoriteCount?: number;
+  viewCount?: number;
 }
 
 /** 筛选器卡片流（filter-module §6.7 `Card`）：对象引用 + 摘要 + 拥有模块给的列表视图（各模块自定形状）。 */

@@ -100,8 +100,16 @@ export interface MediaImageOptions {
   displayWidth?: number;
   /** 固定比例占位：没有原图宽高时用它给出 width / height（避免 CLS），有宽高时用 CSS 裁切到该比例 */
   aspect?: MediaAspect;
-  /** 首屏关键图（详情首图、列表前几张、焦点图第一张）：`fetchpriority="high"`、不懒加载、在 `<head>` 预加载 */
+  /**
+   * 页面的 LCP 图（详情首图、焦点图第一张、列表第一张——一页只有一张）：`fetchpriority="high"`、不懒加载、
+   * 在 `<head>` 预加载。同一次渲染里第二张 priority 图降级为 [eager]（并在开发环境告警）。
+   */
   priority?: boolean;
+  /**
+   * 首屏内、但不是 LCP 的图（列表前几张）：`loading="eager"`，不提高优先级。React 对不懒加载的 `<img>` 自己会在
+   * `<head>` 给一个普通优先级的预加载提示，这里不额外处理。
+   */
+  eager?: boolean;
   className?: string;
 }
 
@@ -129,7 +137,8 @@ const NOMINAL_WIDTH = 1200;
  * 计算 `<img>` 属性（纯函数）。规则（CLIENT_SPEC §7、public-routes §10.4）：
  * - 一律带 `width` / `height`（原图宽高，或按 `aspect` 的名义尺寸），浏览器在下载前就能留出位置（CLS）；
  * - 给了 `aspect` 时用 CSS `aspect-ratio` + `object-fit: cover` 裁到该比例（列表缩略图形状统一）；
- * - `priority`：`loading="eager"` + `fetchpriority="high"`；其余 `loading="lazy"` + `decoding="async"`；
+ * - `priority`：`loading="eager"` + `fetchpriority="high"`；`eager`：只 `loading="eager"`；其余 `loading="lazy"`；
+ *   非 priority 的图一律 `decoding="async"`；
  * - `data-neton-media` / `data-neton-variant` 供长开标签页的图片兜底脚本换取新地址。
  */
 export function mediaImageAttributes(options: MediaImageOptions, loader: MediaLoader = mediaLoader()): MediaImageAttributes {
@@ -154,7 +163,7 @@ export function mediaImageAttributes(options: MediaImageOptions, loader: MediaLo
   const attrs: MediaImageAttributes = {
     src,
     alt: options.alt,
-    loading: options.priority ? "eager" : "lazy",
+    loading: options.priority || options.eager ? "eager" : "lazy",
     decoding: options.priority ? "auto" : "async",
     "data-neton-media": options.media.fileId,
   };

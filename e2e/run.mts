@@ -250,6 +250,22 @@ async function suite(c: Ctx) {
     assert.match(img, /srcSet="|srcset="/i);
   });
 
+  await check("list images: one high-priority LCP image per page, the next cards eager, the rest lazy", async () => {
+    const { text } = await c.html("/list?sort=old");
+    const imgs = [...text.matchAll(/<img [^>]*>/g)].map((m) => m[0]);
+    const high = imgs.filter((i) => /fetchpriority="high"/i.test(i));
+    assert.equal(high.length, 1, "a second priority image is demoted");
+    assert.match(high[0]!, /data-neton-media="file_1"/);
+    assert.equal(imgs.indexOf(high[0]!), 0, "the first priority image (the hero) keeps the slot");
+    // React 对不懒加载的图自己会给普通优先级的预加载提示；高优先级的预加载只能有一个
+    assert.equal([...text.matchAll(/<link rel="preload"[^>]*fetchpriority="high"[^>]*>/gi)].length, 1, "only the LCP image is preloaded with high priority");
+    const card = (id: string) => imgs.slice(1).find((i) => i.includes(`data-neton-media="file_${id}"`)) ?? "";
+    assert.match(card("1"), /loading="eager"/, "the demoted first card stays eager");
+    assert.match(card("2"), /loading="eager"/);
+    assert.doesNotMatch(card("2"), /fetchpriority/i);
+    assert.match(card("3"), /loading="lazy"/);
+  });
+
   await check("status: unknown id 404, withdrawn 404 noindex, invalid param 404 without a backend call", async () => {
     const missing = await c.html("/item/999");
     assert.equal(missing.status, 404);

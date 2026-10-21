@@ -41,6 +41,11 @@ export interface PublicLoadContext {
   backend: PublicBackend;
   /** 本模块命名空间的服务端翻译 */
   t: ServerTranslate;
+  /**
+   * 当前页面的规范路径（按路由形态与路径参数生成，不含查询串；实例的固定参数不在路径里）。
+   * 详情页据此比对后端给的 `shareUrl`（不等就 308），模块不必自己重算。
+   */
+  path: string;
   /** 按站点配置生成另一条公开路由的路径（模块间互链不写死 URL）；路由未装配返回 null。 */
   href(routeKey: string, params?: Record<string, string | number>): string | null;
 }
@@ -48,8 +53,38 @@ export interface PublicLoadContext {
 export interface CardRenderOptions {
   /** 挂载的卡片样式（filter 的 cardStyle），按对象类型 */
   styles?: Record<string, string>;
-  /** 列表首屏前几张图不懒加载（LCP），缺省 3 */
+  /** 列表首屏前几张图不懒加载（`loading="eager"`，不提高优先级），缺省 3 */
   eagerImages?: number;
+  /**
+   * 第一张卡片的图片是页面的 LCP 候选：`fetchpriority="high"` + 预加载。一页只该有一张这样的图
+   * （列表页、首页最新流的第一张；详情页的首图由页面自己给，这里就不要再开）。缺省 false。
+   */
+  priorityFirst?: boolean;
+}
+
+/** 卡片渲染器的入参（public-routes §10.3）。 */
+export interface CardRendererProps {
+  card: PublicCard;
+  /** 挂载的卡片样式（`auto` = 按对象自己的 listStyle） */
+  style: string;
+  /** 首屏前几张：图片不懒加载 */
+  eager: boolean;
+  /** 页面的 LCP 图（至多一张）：`<MediaImage priority>` */
+  priority: boolean;
+  ctx: PublicSeoContext;
+}
+
+/** 客户端插槽贡献的入参（public-routes §10.2）。 */
+export interface ClientSlotProps {
+  objectRef: ObjectRef;
+  summary: ObjectSummary;
+  locale: string;
+}
+
+/** 服务端插槽贡献的入参：多了站点信息与按站点配置生成路径的 `href`（与页面 ctx.href 相同）。 */
+export interface ServerSlotProps extends ClientSlotProps {
+  site: PublicSiteInfo;
+  href(routeKey: string, params?: Record<string, string | number>): string | null;
 }
 
 /** 渲染上下文：取数能力之外，多了插槽与卡片渲染（底座按构建期注册表分发）。 */
