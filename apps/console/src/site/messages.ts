@@ -22,6 +22,7 @@ export const siteCatalogs: StaticCatalogs = {
       "card.untitled": "（无标题）",
       "nav.label": "主导航",
       "nav.skip": "跳到正文",
+      "feed.site.title": "最新内容",
     },
     "en-US": {
       "status.notFound.title": "Page not found",
@@ -38,6 +39,7 @@ export const siteCatalogs: StaticCatalogs = {
       "card.untitled": "(Untitled)",
       "nav.label": "Main navigation",
       "nav.skip": "Skip to content",
+      "feed.site.title": "Latest",
     },
   },
 };
