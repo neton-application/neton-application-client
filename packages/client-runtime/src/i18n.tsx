@@ -33,13 +33,6 @@ export interface I18nConfig {
 
 const STORAGE_KEY = "neton.locale";
 
-/** 构建期配置：NEXT_PUBLIC_NETON_LOCALES（逗号分隔）、NEXT_PUBLIC_NETON_DEFAULT_LOCALE、NEXT_PUBLIC_NETON_TIME_ZONE。 */
-export function i18nConfigFromEnv(): I18nConfig {
-  const locales = (process.env.NEXT_PUBLIC_NETON_LOCALES ?? "zh-CN,en-US").split(",").map((s) => s.trim()).filter(Boolean);
-  const defaultLocale = process.env.NEXT_PUBLIC_NETON_DEFAULT_LOCALE?.trim() || locales[0] || "zh-CN";
-  return { locales, defaultLocale, timeZone: process.env.NEXT_PUBLIC_NETON_TIME_ZONE?.trim() || undefined };
-}
-
 /** 选初始语言：本地记住的 → 浏览器偏好里第一个受支持的 → 默认。 */
 export function resolveInitialLocale(config: I18nConfig): string {
   if (typeof window === "undefined") return config.defaultLocale;

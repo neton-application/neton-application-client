@@ -61,8 +61,8 @@ export interface PageResponse<T> {
  * 当前格式化语言与时区。由 I18nProvider 在语言切换时设置（见 i18n.tsx 的 setFormatLocale），
  * 使模块里直接调用的 [formatDateTime] 不必改成 hook 也能跟随当前语言。
  */
-let formatLocale = process.env.NEXT_PUBLIC_NETON_DEFAULT_LOCALE?.trim() || "zh-CN";
-let formatTimeZone: string | undefined = process.env.NEXT_PUBLIC_NETON_TIME_ZONE?.trim() || undefined;
+let formatLocale = "zh-CN";
+let formatTimeZone: string | undefined;
 
 export function setFormatLocale(locale: string, timeZone?: string): void {
   formatLocale = locale;
