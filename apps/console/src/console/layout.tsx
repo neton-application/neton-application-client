@@ -9,6 +9,7 @@ import { SiteBrandProvider } from "@/components/site-brand";
 import { WorkspaceRoot } from "@/components/workspace-root";
 import { site } from "@/generated/site.generated";
 import { getSiteBrand } from "@/lib/site-brand";
+import "@/styles/console.css";
 
 /**
  * 控制台（受保护）布局，生成在 `(console)/<consoleBasePath>/layout.tsx`。

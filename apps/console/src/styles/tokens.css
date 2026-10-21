@@ -1,18 +1,8 @@
-@import "tailwindcss";
 /*
- * Tailwind 扫描范围。
- *
- * 🔴 console 自己的 src 是自动扫描的，但**工作区宿主与所有业务模块页面都在
- * node_modules 里**（都是 file: 依赖），不显式 @source 就扫不到 —— 只出现在那些
- * 文件里的类不会进产物，页面不报错，只是布局悄悄塌掉（网格退化成单列）。
- *
- * `packages` 是本发行版自有的 client-* 套件；node_modules 覆盖共享的工作区运行时
- * 和各业务模块。
+ * 共享层：设计令牌（亮 / 暗两套 CSS 变量）与最小的基础样式。门户（src/site/public.css）与
+ * 控制台（src/styles/console.css）各自 @import 它——两份样式表互不包含对方的工具类。
+ * 不含 Tailwind 本身：由导入它的入口样式表决定扫描范围。
  */
-@source "../../../../packages";
-@source "../../node_modules/@neton";
-@source "../../../node_modules/@neton";
-
 /* shadcn radius scale: menus < controls < navigation < surfaces. */
 @theme inline {
   --radius-xs: calc(var(--radius) - 6px);
@@ -69,26 +59,6 @@
   --front-warm: oklch(0.646 0.222 41.116);
 }
 
-.admin-filter-grid {
-  display: grid;
-  grid-template-columns: minmax(240px, 1fr) 160px 160px auto;
-  align-items: end;
-  gap: 0.75rem;
-}
-
-.admin-filter-grid-member {
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) 150px auto auto;
-}
-
-@media (max-width: 900px) {
-  .admin-filter-grid { grid-template-columns: 1fr 1fr; }
-  .admin-filter-grid-member { grid-template-columns: 1fr 1fr; }
-}
-
-@media (max-width: 560px) {
-  .admin-filter-grid { grid-template-columns: 1fr; }
-}
-
 .dark {
   color-scheme: dark;
   --background: oklch(0.145 0 0);
@@ -137,12 +107,11 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--body-foreground);
-  font-family: "Geist", "Avenir Next", "Noto Sans SC", "Source Han Sans SC", "PingFang SC", sans-serif;
+  /* 系统字体栈：不加载任何网络字体（门户的性能预算，首屏不等字体） */
+  font-family: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", sans-serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  letter-spacing: -0.006em;
 }
 
 button,
@@ -165,42 +134,4 @@ a {
 .dark ::selection {
   background: oklch(0.371 0 0);
   color: oklch(0.985 0 0);
-}
-
-* {
-  scrollbar-color: #a1a1aa transparent;
-  scrollbar-width: thin;
-}
-
-@keyframes front-fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.front-page-enter {
-  animation: front-fade-up 180ms ease-out;
-}
-
-.front-shell-main {
-  background: var(--background);
-}
-
-.front-surface {
-  border: 1px solid var(--border);
-  background: var(--card);
-  box-shadow: var(--shadow-xs);
-}
-
-.front-scrollbar-hidden {
-  scrollbar-width: none;
-}
-
-.front-scrollbar-hidden::-webkit-scrollbar {
-  display: none;
 }
