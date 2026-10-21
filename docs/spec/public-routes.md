@@ -435,6 +435,8 @@ src/app/(public)/(modules)/…         生成：模块公开路由与模块 feed
 
 公开页的图片一律经运行时的 `<MediaImage>`（`@neton/application-client-runtime/public`），地址由后端 infra 按 CDN 地址策略生成（infra-media §7.3，产品决定 1）：
 
+- 后端给的**站内相对地址**（策略 `none` 时 infra 的中转读取地址 `/app/infra/file/get/…`，相对的是后端而不是门户）一律改走底座的匿名代理 `/api/backend/app/…`（`browserMediaUrl`，`<img>`、`srcset`、分享图与兜底刷新脚本同一规则）；绝对地址（CDN、对象存储）原样使用。
+
 ```ts
 type PublicMedia = { fileId: string; url: string; mimeType?: string | null; width?: number | null; height?: number | null; variants?: Record<string, string> | null };
 <MediaImage media={m} alt="…" displayWidth={720} aspect="3:2" priority sizes="…" className="…" />
