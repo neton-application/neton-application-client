@@ -126,5 +126,10 @@ test("module feeds get their own route handler", () => {
   const withFeed: FrontModuleManifest = { ...filter, feeds: [{ id: "filter.channel", pattern: "/channel/:code/rss.xml", params: { code: "code" }, entry: "channel" }] };
   const out = plan(input({ modules: [{ pkg: "p", manifest: withFeed }] }));
   assert.deepEqual(out.errors, []);
-  assert.match(out.files["src/app/(public)/(modules)/channel/[code]/rss.xml/route.ts"]!, /"use cache";/);
+  const route = out.files["src/app/(public)/(modules)/channel/[code]/rss.xml/route.ts"]!;
+  assert.match(route, /"use cache";/);
+  // 参数规则是字面量联合：META 显式标注类型，否则 {"code":"code"} 被推断成 string，生成文件过不了类型检查
+  assert.match(route, /const META: FeedRouteMeta = \{/);
+  assert.match(route, /await connection\(\);/);
+  assert.match(route, /\(await context\.params\) \?\? \{\}/);
 });

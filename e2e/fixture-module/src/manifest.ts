@@ -24,5 +24,7 @@ export default defineFrontModule({
   feeds: [
     { id: "fixture.latest", entry: "latest", site: true },
     { id: "fixture.list", pattern: "/list/rss.xml", entry: "latest" },
+    // 带路径参数的模块 feed：生成的路由文件必须过 next build 的类型检查
+    { id: "fixture.item", pattern: "/item/:id/rss.xml", entry: "latest", params: { id: "id" } },
   ],
 });

@@ -160,9 +160,9 @@ export default page.Page;
 function feedRouteFile(pkg: string, entry: string, meta: { id: string; namespace: string; pattern: string; params: Record<string, PublicParamRule> }): string {
   return `${HEADER}import feed from ${JSON.stringify(`${pkg}/feeds/${entry}`)};
 import { connection } from "next/server";
-import { feedResponse, renderFeed } from "@/site/feeds";
+import { feedResponse, renderFeed, type FeedRouteMeta } from "@/site/feeds";
 
-const META = ${JSON.stringify(meta)};
+const META: FeedRouteMeta = ${JSON.stringify(meta)};
 
 async function body(params: Record<string, string>) {
   "use cache";

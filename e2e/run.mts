@@ -399,6 +399,8 @@ async function suite(c: Ctx) {
     assert.match(rssXml, new RegExp(`<atom:link href="${ORIGIN}/rss.xml" rel="self"`));
     assert.ok(rssXml.includes(`<link>${ORIGIN}/item/1</link>`));
     assert.match(await (await c.get("/list/rss.xml")).text(), new RegExp(`<atom:link href="${ORIGIN}/list/rss.xml"`));
+    assert.match(await (await c.get("/item/1/rss.xml")).text(), new RegExp(`<atom:link href="${ORIGIN}/item/1/rss.xml"`));
+    assert.equal((await c.get("/item/abc/rss.xml")).status, 404, "feed parameters are validated");
     assert.equal(await (await c.get("/indexnow-key.txt")).text(), INDEXNOW_KEY);
   });
 

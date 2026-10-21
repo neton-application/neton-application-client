@@ -135,8 +135,11 @@ export async function siteFeedResponse(): Promise<Response> {
   return xml ? xmlResponse(xml, "list", "application/rss+xml; charset=utf-8") : notFound();
 }
 
+/** 生成的模块 feed 路由文件写进去的静态描述（显式标注类型：参数规则是字面量联合，不能被推断宽化成 string）。 */
+export interface FeedRouteMeta { id: string; namespace: string; pattern: string; params: Record<string, PublicParamRule> }
+
 /** 模块 feed（生成的路由文件在自己的 `"use cache"` 函数里调它）。 */
-export async function renderFeed(feed: FeedDefinition, meta: { id: string; namespace: string; pattern: string; params: Record<string, PublicParamRule> }, rawParams: Record<string, string>): Promise<string | null> {
+export async function renderFeed(feed: FeedDefinition, meta: FeedRouteMeta, rawParams: Record<string, string>): Promise<string | null> {
   cacheLife(cacheProfile("list"));
   const params = validateParams(rawParams, meta.params);
   if (!params) return null;
