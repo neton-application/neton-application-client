@@ -9,8 +9,12 @@
  * - src/app/(public)/(modules)/…、(site)/…：公开路由与 fork 页面的真实路由文件（不入库）
  * 任何校验失败即以非零码退出，构建中断。
  *
- * 环境变量：NETON_SITE_ORIGIN 覆盖 origin；NETON_CLIENT_MODULES_FILE / NETON_SITE_CONFIG_FILE
- * 换一份装配清单 / 站点配置（底座的端到端测试用夹具）。
+ * - src/generated/next.generated.json：next.config 读的构建参数（要转译的模块包）——next.config 不再自己
+ *   import 装配清单，换一份清单（夹具）时两边天然一致
+ *
+ * 环境变量：NETON_SITE_ORIGIN 覆盖 origin；NETON_CLIENT_MODULES_FILE / NETON_SITE_CONFIG_FILE /
+ * NETON_PUBLIC_ROUTES_FILE 换一份装配清单 / 站点配置 / URL 形态基线（底座的端到端测试用夹具，e2e/run.mts；
+ * 夹具有自己的基线，不碰产品入库的 src/generated/public-routes.json）。
  */
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -68,7 +72,7 @@ const sitePageEntries = existsSync(sitePagesDir)
   ? readdirSync(sitePagesDir).filter((f) => f.endsWith(".tsx")).map((f) => f.replace(/\.tsx$/, ""))
   : [];
 
-const routesJsonPath = path.join(shellDir, "src/generated/public-routes.json");
+const routesJsonPath = path.resolve(shellDir, process.env.NETON_PUBLIC_ROUTES_FILE ?? "src/generated/public-routes.json");
 const previousRoutes = existsSync(routesJsonPath)
   ? (JSON.parse(await readFile(routesJsonPath, "utf8")) as { routes: Record<string, string> }).routes
   : null;
@@ -114,6 +118,7 @@ for (const [file, content] of Object.entries(result.files)) {
 }
 await mkdir(path.dirname(routesJsonPath), { recursive: true });
 await writeFile(routesJsonPath, `${JSON.stringify({ version: 1, routes: result.routesJson }, null, 2)}\n`);
+await writeFile(path.join(shellDir, "src/generated/next.generated.json"), `${JSON.stringify({ transpilePackages: packages }, null, 2)}\n`);
 
 const pageCount = modules.reduce((n, m) => n + m.manifest.pages.length, 0);
 console.log(

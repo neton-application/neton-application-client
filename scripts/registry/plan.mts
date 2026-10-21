@@ -103,6 +103,11 @@ function join(...parts: string[]): string {
   return parts.filter(Boolean).join("/");
 }
 
+/** 只生成查询变体的路由：没有路径参数、且可缓存（dynamic 档每次渲染，不涉及构建期预渲染）。 */
+export function isQueryOnly(route: Pick<PlannedRoute, "pattern" | "cache">): boolean {
+  return route.cache !== "dynamic" && patternParamNames(route.pattern).length === 0;
+}
+
 const HEADER = "/* 自动生成：pnpm registry（scripts/generate-registry.mts）。禁止手改，不入库。 */\n";
 
 function routeFile(route: PlannedRoute, variant: "plain" | "query"): string {
@@ -154,6 +159,7 @@ export default page.Page;
 
 function feedRouteFile(pkg: string, entry: string, meta: { id: string; namespace: string; pattern: string; params: Record<string, PublicParamRule> }): string {
   return `${HEADER}import feed from ${JSON.stringify(`${pkg}/feeds/${entry}`)};
+import { connection } from "next/server";
 import { feedResponse, renderFeed } from "@/site/feeds";
 
 const META = ${JSON.stringify(meta)};
@@ -163,8 +169,10 @@ async function body(params: Record<string, string>) {
   return renderFeed(feed, META, params);
 }
 
-export async function GET(_request: Request, context: { params: Promise<Record<string, string>> }) {
-  return feedResponse(await context.params, body);
+/** 按请求生成（内容是上面的缓存单元）：构建期不预渲染、不连后端（public-routes §1a）。 */
+export async function GET(_request: Request, context: { params?: Promise<Record<string, string> | undefined> }) {
+  await connection();
+  return feedResponse((await context.params) ?? {}, body);
 }
 `;
 }
@@ -414,10 +422,17 @@ export function plan(input: PlanInput): PlanOutput {
   if (siteFeeds.length && !site.feeds.site?.title) fail(`site feed contributions exist (${siteFeeds.map((f) => f.id).join(", ")}) but site.config feeds.site.title is not set`);
 
   // ---- 生成物 ----
+  // 没有路径参数的可缓存路由（首页、`/hot`）只生成查询变体：proxy 把裸地址改写到 `~q/-`。这样它们与带参数的
+  // 路由同形——按需渲染 + ensureStatic，构建期只预渲染哨兵（404），不连后端（public-routes §1a）。
   for (const route of routes) {
     const dir = join(`src/app/(public)/${route.group}`, routeDir(route.pattern));
+    const queryVariant = join(dir, QUERY_SEGMENT, `[${QUERY_PARAM}]`, "page.tsx");
+    if (isQueryOnly(route)) {
+      files[queryVariant] = routeFile(route, "query");
+      continue;
+    }
     files[join(dir, "page.tsx")] = routeFile(route, "plain");
-    if (route.query.length) files[join(dir, QUERY_SEGMENT, `[${QUERY_PARAM}]`, "page.tsx")] = routeFile(route, "query");
+    if (route.query.length) files[queryVariant] = routeFile(route, "query");
   }
   Object.assign(files, consoleFiles(site.consoleBasePath));
 
@@ -455,7 +470,7 @@ ${localeEntries.join("\n")}
 export const site: ResolvedSite = ${JSON.stringify(site, null, 2)};
 `;
 
-  const proxyRoutes = routes.map((r) => ({ key: r.key, pattern: r.pattern, query: r.query, goneAware: r.goneAware }));
+  const proxyRoutes = routes.map((r) => ({ key: r.key, pattern: r.pattern, query: r.query, goneAware: r.goneAware, ...(isQueryOnly(r) ? { queryOnly: true } : {}) }));
   files["src/generated/public-proxy.generated.ts"] = `${HEADER}import type { PublicProxyConfig } from "@neton/application-client-runtime/public-proxy";
 
 /** proxy 只拿数据：不 import 任何模块代码，proxy 的打包入口保持很小。 */

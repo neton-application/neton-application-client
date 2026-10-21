@@ -9,7 +9,8 @@ const proxy = createPublicProxy({
   consoleBasePath: "/my",
   routes: [
     { key: "filter.channel", pattern: "/channel/:code", query: ["cursor"], goneAware: true },
-    { key: "site.home", pattern: "/", query: [], goneAware: false },
+    { key: "site.home", pattern: "/", query: [], goneAware: false, queryOnly: true },
+    { key: "content.ranking", pattern: "/hot", query: ["period", "by"], goneAware: false, queryOnly: true },
   ],
   legacy: [{ from: "/c/:code", to: "/channel/:code" }],
   nonConsole: ["/login", "/api"],
@@ -54,4 +55,15 @@ test("deleted URLs of goneAware routes answer 410 with the static noindex page",
   assert.equal(res.headers.get("x-robots-tag"), "noindex");
   assert.equal(await res.text(), "<!DOCTYPE html><title>Gone</title>");
   assert.equal((await proxy(req("/channel/live"))).status, 200);
+});
+
+test("parameterless cacheable routes are always served from their on-demand query variant", async () => {
+  assert.equal((await proxy(req("/"))).headers.get("x-middleware-rewrite"), "https://www.example.com/~q/-");
+  assert.equal((await proxy(req("/?utm_source=x"))).headers.get("x-middleware-rewrite"), "https://www.example.com/~q/-");
+  assert.equal((await proxy(req("/hot"))).headers.get("x-middleware-rewrite"), "https://www.example.com/hot/~q/-");
+  assert.equal(
+    (await proxy(req("/hot?by=comments&period=week&utm_medium=y"))).headers.get("x-middleware-rewrite"),
+    `https://www.example.com/hot/~q/${encodeQuerySegment("by=comments&period=week")}`,
+  );
+  assert.equal((await proxy(req("/~q/-"))).status, 404, "the internal address itself stays unreachable");
 });

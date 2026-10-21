@@ -1,5 +1,6 @@
 /** 仅限 server 侧（RSC / Route Handler）使用。 */
 import { cookies } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 import type { Envelope, MemberLoginResponse, MemberProfile } from "./types";
 
@@ -52,6 +53,8 @@ export async function backendJson<T>(
       cache: "no-store",
     });
   } catch (e) {
+    // Next 的控制流错误（预渲染结束时挂起的请求被取消、动态用法中断）原样抛回框架，不当成后端不可达
+    unstable_rethrow(e);
     console.error(`[backend] ${path} unreachable: ${String(e)}`);
     return { code: 3, message: "BACKEND_UNREACHABLE" };
   }

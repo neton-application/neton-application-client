@@ -77,8 +77,13 @@ test("fork pages are generated into the (site) group and must exist", () => {
   const home = { key: "site.home", pattern: "/", entry: "home", cache: "list" as const, indexable: true };
   const out = plan(input({ site: { ...portal, pages: [home] }, sitePageEntries: ["home"] }));
   assert.deepEqual(out.errors, []);
-  assert.match(out.files["src/app/(public)/(site)/page.tsx"]!, /import route from "@\/site\/pages\/home";/);
-  assert.doesNotMatch(out.files["src/app/(public)/(site)/page.tsx"]!, /generateStaticParams/, "a parameterless page is prerendered for real");
+  // 无参数页面只有查询变体（proxy 把 `/` 改写到 `/~q/-`）：构建期只预渲染哨兵，不连后端
+  assert.equal(out.files["src/app/(public)/(site)/page.tsx"], undefined);
+  const variant = out.files["src/app/(public)/(site)/~q/[_q]/page.tsx"]!;
+  assert.match(variant, /import route from "@\/site\/pages\/home";/);
+  assert.match(variant, /export const ensureStatic = "navigation";/);
+  assert.match(variant, /return \[\{"_q":"_"\}\];/);
+  assert.match(out.files["src/generated/public-proxy.generated.ts"]!, /"key": "site.home",[^}]*"queryOnly": true/);
   assert.ok(plan(input({ site: { ...portal, pages: [home] } })).errors.some((e) => /src\/site\/pages\/home.tsx does not exist/.test(e)));
 });
 

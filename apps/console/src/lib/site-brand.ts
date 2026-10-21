@@ -21,6 +21,9 @@ export async function getSiteBrand(): Promise<SiteBrand> {
   "use cache";
   cacheLife(PUBLIC_CACHE_PROFILES.list);
   cacheTag(SITE_CONFIG_TAG);
+  // 构建期不连后端（public-routes §1a）：构建期预渲染的只有哨兵页与静态的登录注册页、站点 404，
+  // 它们按 list 档 30 秒后在运行期重新生成，换上后台配置的品牌
+  if (process.env.NEXT_PHASE === "phase-production-build") return FALLBACK_SITE_BRAND;
   try {
     const res = await fetch(`${publicBackendUrl()}/admin/system/site/public`, { signal: AbortSignal.timeout(3000) });
     const body = (await res.json()) as { code?: number; data?: { name?: string; tagline?: string; captcha?: unknown } };

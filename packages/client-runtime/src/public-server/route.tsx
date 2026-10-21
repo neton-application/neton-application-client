@@ -29,11 +29,12 @@ import type { Metadata } from "next";
 import { cacheLife, cacheTag } from "next/cache";
 import { headers } from "next/headers";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
+import { connection } from "next/server";
 import { forwardedClientHeaders } from "../forwarded";
-import { PUBLIC_CACHE_PROFILES, type PublicCacheProfileName } from "../public/cache-profiles";
+import { cacheProfile, PUBLIC_CACHE_PROFILES, type PublicCacheProfileName } from "../public/cache-profiles";
 import type { PublicLoadContext, PublicLoadResult, PublicPageContext, PublicRouteDefinition, PublicRouteMeta, PublicSeoContext, PublicSiteInfo, CardRenderOptions } from "../public/define";
-import { canonicalQuery, decodeQuerySegment } from "../public/query";
-import { buildPath, validateParams } from "../public/route-pattern";
+import { canonicalQuery, decodeQuerySegment, EMPTY_QUERY_SEGMENT } from "../public/query";
+import { buildPath, patternParamNames, validateParams } from "../public/route-pattern";
 import { serializeJsonLd, statusMetadata, toNextMetadata, type PublicSeo, type SeoContext } from "../public/seo";
 import { normalizeTags } from "../public/tags";
 import type { ObjectRef, ObjectSummary, PublicCard } from "../public/types";
@@ -74,7 +75,7 @@ function profileFor<D>(result: PublicLoadResult<D>, meta: PublicRouteMeta): Publ
 }
 
 /** 校验 URL 参数与查询段；任何一处不合法返回 null（→ 404，不打后端）。 */
-export function resolveRequest(raw: RawParams, meta: Pick<PublicRouteMeta, "params" | "query" | "fixed">): ResolvedRequest | null {
+export function resolveRequest(raw: RawParams, meta: Pick<PublicRouteMeta, "pattern" | "params" | "query" | "fixed">): ResolvedRequest | null {
   const path: Record<string, string> = {};
   let encodedQuery: string | undefined;
   for (const [name, value] of Object.entries(raw)) {
@@ -85,7 +86,10 @@ export function resolveRequest(raw: RawParams, meta: Pick<PublicRouteMeta, "para
   const params = validateParams(path, meta.params);
   if (!params) return null;
   let query: Record<string, string> = {};
-  if (encodedQuery !== undefined) {
+  if (encodedQuery === EMPTY_QUERY_SEGMENT) {
+    // 只有无路径参数的路由由 proxy 改写成「空查询段」；带参数的路由不接受它（同一页面只有一个缓存条目）
+    if (patternParamNames(meta.pattern).length) return null;
+  } else if (encodedQuery !== undefined) {
     const decoded = decodeQuerySegment(encodedQuery, meta.query);
     if (!decoded) return null;
     query = decoded;
@@ -108,7 +112,10 @@ export function createPublicRuntime(deps: PublicRuntimeDeps) {
 
   async function forwardedHeaders(meta: PublicRouteMeta): Promise<Record<string, string> | undefined> {
     // 只有不缓存的 dynamic 路由才碰请求头；可缓存的渲染不能依赖请求（§5）
-    return meta.cache === "dynamic" ? forwardedClientHeaders(await headers()) : undefined;
+    if (meta.cache !== "dynamic") return undefined;
+    // 先声明「请求期渲染」：之后取数客户端读当前时间（预算截止）不再被当成预渲染期的不稳定值
+    await connection();
+    return forwardedClientHeaders(await headers());
   }
 
   /**
@@ -120,7 +127,7 @@ export function createPublicRuntime(deps: PublicRuntimeDeps) {
     const ctx: PublicLoadContext = { ...base, backend: createPublicBackend({ headers: clientHeaders }) };
     const result = await route.load(ctx);
     if (meta.cache !== "dynamic") {
-      cacheLife(PUBLIC_CACHE_PROFILES[profileFor(result, meta)]);
+      cacheLife(cacheProfile(profileFor(result, meta)));
       const tags = result.kind === "redirect" ? [] : normalizeTags(result.tags ?? []);
       if (tags.length) cacheTag(...tags);
     }

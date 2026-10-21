@@ -9,11 +9,13 @@
  * 3. 旧 URL 形态（legacy）→ 308 到当前形态；
  * 4. goneAware 路由且地址在已删除集合里 → 410：proxy 直接给出生成期写好的静态 410 页（noindex）。
  *    不用「改写到一个 410 页面 + 状态码」：Next 16 不保证改写响应带上 proxy 给的状态码（实测时有时无）。
- * 5. 带白名单查询参数的公开路由 → 改写到 `<路径>/~q/<规范编码>`（白名单外的参数丢掉，见 query.ts）。
+ * 5. 带白名单查询参数的公开路由 → 改写到 `<路径>/~q/<规范编码>`（白名单外的参数丢掉，见 query.ts）；
+ *    没有路径参数的可缓存路由（`queryOnly`，如首页）只有查询变体，裸地址也改写进去（`/` → `/~q/-`），
+ *    于是它们按需渲染、构建期不预渲染（public-routes §1a）。
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { isConsolePath, loginHref } from "../public/next-path";
-import { canonicalQuery, encodeQuerySegment, QUERY_SEGMENT } from "../public/query";
+import { canonicalQuery, EMPTY_QUERY_SEGMENT, encodeQuerySegment, QUERY_SEGMENT } from "../public/query";
 import { buildPath, matchPattern } from "../public/route-pattern";
 import { goneStore } from "./gone";
 
@@ -25,6 +27,11 @@ export interface PublicProxyRoute {
   pattern: string;
   query: string[];
   goneAware: boolean;
+  /**
+   * 路由只生成了查询变体（没有路径参数、且不是 dynamic 档）：裸地址也要改写到 `~q/-`。
+   * 生成脚本给出；缺省 false。
+   */
+  queryOnly?: boolean;
 }
 
 export interface PublicProxyConfig {
@@ -82,14 +89,15 @@ export function createPublicProxy(config: PublicProxyConfig) {
           headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": GONE_CACHE_CONTROL, "X-Robots-Tag": "noindex" },
         });
       }
-      if (route.query.length && search) {
-        const canonical = canonicalQuery(request.nextUrl.searchParams, route.query);
-        if (canonical) {
-          const target = new URL(request.url);
-          target.pathname = `${pathname === "/" ? "" : pathname}/${QUERY_SEGMENT}/${encodeQuerySegment(canonical)}`;
-          target.search = "";
-          return NextResponse.rewrite(target);
-        }
+      const canonical = route.query.length && search ? canonicalQuery(request.nextUrl.searchParams, route.query) : "";
+      if (canonical || route.queryOnly) {
+        // nextUrl.clone()：保持 Next 眼中的同一个源。用 request.url 重建时主机可能是 localhost 而服务绑在
+        // 127.0.0.1（或反代后的内部主机名），源一变，改写就成了「代理到外部地址」，请求落空成 404
+        const target = request.nextUrl.clone();
+        const segment = canonical ? encodeQuerySegment(canonical) : EMPTY_QUERY_SEGMENT;
+        target.pathname = `${pathname === "/" ? "" : pathname}/${QUERY_SEGMENT}/${segment}`;
+        target.search = "";
+        return NextResponse.rewrite(target);
       }
       return NextResponse.next();
     }
