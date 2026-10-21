@@ -1,7 +1,7 @@
 # 公开路由契约：匿名可缓存的 SSR 页面
 
 > 标识：NETON-APP-CLIENT-PUBLIC
-> 日期：2026-10-22 · 状态：Draft r1（待评审，未实现）
+> 日期：2026-10-22 · 状态：**Accepted r2**（C1 已实现：契约 1.1.0、注册表生成、渲染管线、SEO 元数据、404 / 410 / 308、缓存档位与标签、失效端点、插槽与卡片、robots / sitemap / RSS 管线、短信登录与 `next` 跳回、控制台前缀；其余分期见 §15）
 > 范围：`neton-application-client` 底座新增「公开路由」贡献点，让模块贡献匿名、可被 CDN 缓存、可被搜索引擎收录的 SSR 页面；产品 fork 提供门户外壳。client-contract 由 1.0.0 升到 **1.1.0**（只增不改）。
 > 关联：
 > - 后台底座规范 `privchat-docs/spec/07-application/NETON_APPLICATION_FRONT_SPEC.md`（模块契约、构建期注册表、RSC 非契约、贡献点）
@@ -25,9 +25,10 @@
 
 **不做**：多站点 / 多租户；独立移动站（`m.` 域名，响应式单域名即可）；AMP；运行期注册路由；页面级 A/B 实验框架。
 
-## 1. 决议（评审通过后冻结）
+## 1. 决议（已冻结）
 
-1. 公开页面由模块在 manifest 的 `publicRoutes` 里声明，构建期生成**真实的 Next 路由文件**（不是 catch-all），每条路由有自己的元数据、状态码与缓存配置。
+1. 公开页面由模块在 manifest 的 `publicRoutes` 里声明，构建期生成**真实的 Next 路由文件**（不是 catch-all），每条路由有自己的元数据、状态码与缓存配置。产品 fork 的公开页面（首页等）在站点配置 `pages` 里声明、入口放 `src/site/pages/*.tsx`，走同一条生成管线与同一套检查。
+1a. 缓存模型是 Next 16 的 Cache Components：生成的路由文件里 `load` 包一层模块作用域的 `"use cache"` 函数，并导出 `ensureStatic = "navigation"` 与一组**必然不合法的参数**作为 `generateStaticParams`。理由（C1 原型实测）：不加 `ensureStatic` 时，未预渲染参数的第一次请求先发出 App Shell，200 已经提交，`notFound()` 退化成 200 + noindex、`redirect()` 退化成客户端跳转；加上之后第一次请求也等完整页面，404 / 308 准确，结果进 ISR 缓存。哨兵参数让构建期只预渲染出一个 404（Cache Components 要求至少一组参数），构建不需要连后端；没有参数的页面（首页）在构建期真实预渲染，构建机需要能访问后端（连不上即构建失败，不把空页面烤进缓存）。
 2. 公开页面的取数在服务端完成，打的是部署配置里的后端内网地址；**可缓存的渲染不携带任何会员身份**（不转发 Cookie、不带 Authorization、不读 `cookies()` / `headers()`）。
 3. 缓存的 HTML 里**没有任何个性化数据**；登录态、收藏状态、我的投票等一律在客户端水合后取。
 4. 规范链接（canonical）、站点地址一律取站点配置的 `origin`，**从不取请求的 Host**（防缓存投毒）。
@@ -40,23 +41,24 @@
 
 | 路径 | 归属 | 缓存 | 说明 |
 | --- | --- | --- | --- |
-| `/`、模块公开路由、fork 手写的公开页 | `(public)` 路由组 | CDN 可缓存（§8.4） | 匿名渲染 |
+| `/`、模块公开路由、fork 的公开页 | `(public)` 路由组（生成在 `(modules)` / `(site)` 下） | CDN 可缓存（§8.1） | 匿名渲染 |
 | `{consoleBasePath}/*`（如 `/my/*`） | 控制台 | `private, no-store` | 受保护布局，未登录跳登录页 |
-| `/login`、`/register`、`/forgot-password` | `(auth)` | `private, no-store` | 门户与控制台共用；支持 `?next=` |
+| `/login`、`/register`、`/forgot-password` | `(auth)` | 静态页（不含个人数据，可缓存） | 门户与控制台共用；支持 `?next=`；登录 / 注册 / 短信登录的 POST 都过 CSRF 检查（防登录 CSRF） |
 | `/api/*` | Route Handler | `no-store` | 代理、会话、失效端点 |
 | `/robots.txt`、`/sitemap.xml`、`/sitemaps/*`、`/rss.xml` 与模块声明的 feed 路径 | 底座 SEO 路由 | 可缓存 | §11 |
 | `/_next/*`、`/static/*` | 静态资源 | `immutable` | 构建产物带哈希 |
 
 ### 2.1 控制台前缀
 
-- `consoleBasePath` 在站点配置（§3）里设置，**构建期常量**。底座缺省 `/`，保持现有 fork（只有控制台、没有门户的产品）行为不变。
+- `consoleBasePath` 在站点配置（§3）里设置，**构建期常量**。底座 `site.config.ts` 缺省 `/`，保持现有 fork（只有控制台、没有门户的产品）行为不变；这类产品的 robots.txt 为 `Disallow: /`（整站是登录后的页面），sitemap 索引为空。
 - 只要装配了任何 `publicRoutes`，或 fork 在 `(public)` 下写了根页面，`consoleBasePath` 就**不能是 `/`**，注册表生成失败。
-- 控制台的路由文件由注册表生成脚本按前缀生成到 `src/app/(console)/<base>/…`（生成物，不入库）；模块 manifest 里 `pages[].path` 仍写相对路径（如 `/account/profile`），实际地址是 `{consoleBasePath}/account/profile`。模块代码里**禁止**写死控制台前缀，跳转用运行时的 `consoleHref(path)`。
-- 工作区宿主需要支持前缀：`createBrowserHistoryHost({ basePath })`。这是 `neton-application-front` 的 `front-workspace` 包的通用改动（admin 线不用时传空），在那边先落。
+- 控制台的路由文件由注册表生成脚本按前缀生成到 `src/app/(console)/<base>/…`（`layout.tsx` 带 `instant = false`，只 re-export 入库的 `src/console/layout.tsx`、`page.tsx`；生成物不入库）；模块 manifest 里 `pages[].path` 仍写相对路径（如 `/account/profile`），实际地址是 `{consoleBasePath}/account/profile`。模块里的 `KitLink` / `WorkspaceLink` 照写工作区地址，渲染 `<a href>` 时自动加前缀；工作区之外的跳转用运行时的 `consoleHref(path)`，**禁止**写死前缀。
+- 工作区宿主的前缀支持已在 `neton-application-front` 的 `front-workspace` 落地（ecadcb6）：`createBrowserHistoryHost({ basePath })`，工作区内部地址（manifest path、页签、持久化）一律不带前缀，只有地址栏与 `<a href>` 加前缀（适配器新增 `toExternal` / `toInternal`，kit 导航新增 `hrefOf`）；admin 线传空串，行为不变。
+- 没有会话 Cookie 访问控制台：proxy 直接 307 到 `/login?next=<原地址>`（原地址就是控制台首页时省略 `next`，缺省即回控制台首页）；Cookie 在但会话失效时由受保护布局按 proxy 放进请求头的原地址跳登录。
 
 ### 2.2 保留前缀
 
-模块与 fork 的公开路由不得占用：`consoleBasePath`、`/api`、`/login`、`/register`、`/forgot-password`、`/_next`、`/static`、`/robots.txt`、`/sitemap.xml`、`/sitemaps`、`/rss.xml`、`/favicon.ico`、`/.well-known`、`/indexnow-key.txt`。冲突即构建失败。
+模块与 fork 的公开路由不得占用：`consoleBasePath`、`/api`、`/login`、`/register`、`/forgot-password`、`/_next`、`/static`、`/robots.txt`、`/sitemap.xml`、`/sitemaps`、`/rss.xml`、`/favicon.ico`、`/.well-known`、`/indexnow-key.txt`。冲突即构建失败。路径段 `~q` 是内部查询段（§4.3），外部直接访问一律 404。
 
 ## 3. 站点配置（fork 的增量文件）
 
@@ -67,7 +69,11 @@ export default defineSite({
   /** 规范来源地址：canonical、sitemap、RSS、JSON-LD 都用它。部署可用 NETON_SITE_ORIGIN 覆盖（构建期读取）。 */
   origin: "https://www.example.com",
   consoleBasePath: "/my",
-  locales: { default: "zh-CN", supported: ["zh-CN"], prefix: "none" },   // §12
+  locales: { default: "zh-CN", supported: ["zh-CN"], prefix: "none" },   // §12；控制台与登录页可选的语言也取这里
+  timeZone: "Asia/Shanghai",
+  brand: { name: "itwind" },                                              // 后端不可达时的品牌兜底
+  auth: { loginMethods: ["sms", "password"], defaultCallingCode: "+86" }, // 缺省 ["password"]
+  pages: [{ key: "site.home", pattern: "/", entry: "home", cache: "list", indexable: true }],  // fork 页面 → src/site/pages/home.tsx
   routes: {
     /** 改模块路由的 URL 形态（键 = 路由 key）。只能改形态，参数名必须一致。 */
     override: { "content.item": "/article/:id" },
@@ -77,15 +83,18 @@ export default defineSite({
     instances: [{ key: "content.item@video", of: "content.item", pattern: "/video/:id", fixed: { type: "video" } }],
   },
   slots: { order: { "public.object.toolbar": ["interaction.favorite", "content.share"] }, hide: [] },
-  robots: { disallow: ["/search"] },
+  robots: { disallow: ["/search"], deadLinkFile: true },
   verification: { google: "", baidu: "", bing: "" },   // 输出为 <meta name="…-site-verification">
-  feeds: { site: { title: "site.feed.title" } },       // 词条 key
+  feeds: { site: { title: "site.feed.title" } },       // 词条 key（命名空间 site）
+  media: { signedUrlValiditySeconds: 3600 },            // 开启 CDN 鉴权时填，见 §8.1 与 infra-media §7.3
 });
 ```
 
 - 密钥不进这个文件：失效端点的共享密钥 `NETON_SITE_REVALIDATE_SECRET`、IndexNow key `NETON_SITE_INDEXNOW_KEY` 走环境变量（运行期读取）。
-- 品牌名、描述、版权、备案号等沿用底座现有的品牌配置（`getSiteBrand()`），不进 i18n。
+- 品牌名、描述、版权、备案号等沿用底座现有的品牌配置（`getSiteBrand()`，`"use cache"` + `list` 档 + 标签 `site:config`），不进 i18n。
 - 门户外壳是固定位置的文件 `apps/console/src/site/portal-shell.tsx`（§10.1），底座给一个最小默认实现，fork 覆盖。
+- 站点配置由运行时的 `resolveSite()` 统一解析与校验（生成脚本与 `next.config` 都调它）：origin 只能是 `scheme://host[:port]`、前缀只能是小写普通路径段、`loginMethods` 只能是 `password` / `sms`、时区必须是合法 IANA 名、`media` 与缓存档位冲突（§8.1）即启动 / 构建失败。登录方式是产品配置，后端仍按自己的注册策略校验（理由：account 模块没有对网页公开注册策略的匿名接口，登录方式又是构建期的页面形态，放站点配置最直接）。
+- 原来的 `NEXT_PUBLIC_NETON_LOCALES` / `_DEFAULT_LOCALE` / `_TIME_ZONE` 构建变量已删除：控制台与登录页的语言列表也取 `locales`（单一来源，单语言门户不会出现浏览器语言的登录页）。
 
 ## 4. 契约增量（client-contract 1.1.0）
 
@@ -95,6 +104,7 @@ export const FRONT_CONTRACT_VERSION = "1.1.0";
 export interface FrontModuleManifest {
   // …1.0.0 的字段不变
   publicRoutes?: PublicRouteManifest[];
+  slotTargets?: string[];                // 本模块声明的插槽 id（以 `<模块 id>.` 开头）
   slots?: SlotContribution[];            // 公开页与控制台的插槽贡献（§10）
   cardRenderers?: CardRendererManifest[];// 按对象类型渲染卡片（§10.3）
   sitemaps?: SitemapContribution[];      // §11.2
@@ -106,14 +116,14 @@ export interface PublicRouteManifest {
   key: string;
   /** 缺省 URL 形态：静态段 + `:name` 参数（整段），不支持可选段与通配。如 "/article/:id"。 */
   pattern: string;
-  /** 参数校验：id = 十进制正整数（≤ 19 位），slug = 词条 slug 规则，int，enum。不合法直接 404，不打后端。 */
-  params?: Record<string, "id" | "slug" | "int" | { enum: string[] }>;
+  /** 参数校验：id = 十进制正整数（≤ 19 位，≤ Long 上限），int，slug = 词条 slug 规则（小写字母含中文、数字、`-`、`_`），code = 节点编码 `[a-z0-9][a-z0-9_-]{0,63}`，enum。不合法直接 404，不打后端。 */
+  params?: Record<string, "id" | "int" | "slug" | "code" | { enum: string[] }>;
   /** 允许读取的查询参数白名单；其余参数不进缓存键（统计参数 utm_* 等一律剥掉）。 */
   query?: string[];
   /** `<pkg>/public/<entry>`，服务端模块，导出 definePublicRoute(...) 的结果。 */
   entry: string;
   /** 缓存档位（§8.1）。 */
-  cache: "object" | "list" | "static" | "dynamic";
+  cache: "object" | "list" | "static" | "dynamic";   // dynamic 只能 200，必须 indexable: false（§7.3）
   /** 缺省 robots：false = noindex, follow。页面可按数据再收紧，不能放宽。 */
   indexable: boolean;
   /** 可被站点配置的 instances 复用（带固定参数）。 */
@@ -129,7 +139,7 @@ export interface SlotContribution {
   target: string;
   id: string;                               // "<模块 id>.<名称>"
   entry: string;                            // `<pkg>/slots/<entry>`
-  rendering: "server" | "client" | "hybrid";
+  rendering: "server" | "client";          // 「服务端首屏 + 客户端接管」= server 组件里渲染 client 岛，不单列 hybrid
   /** 只在对象具备该能力时渲染（ObjectSummary.capabilities），如 "comment"、"favorite"。 */
   capability?: string;
   /** 只接这些对象类型；省略 = 任意。 */
@@ -139,7 +149,7 @@ export interface SlotContribution {
 
 export interface CardRendererManifest { objectType: string; entry: string; }   // `<pkg>/cards/<entry>`
 export interface SitemapContribution { id: string; entry: string; news?: boolean; }   // `<pkg>/sitemaps/<entry>`
-export interface FeedContribution { id: string; pattern: string; entry: string; }     // `<pkg>/feeds/<entry>`
+export interface FeedContribution { id: string; pattern?: string; entry: string; site?: boolean; params?: Record<string, ParamRule>; }  // `<pkg>/feeds/<entry>`；site = 聚合进 /rss.xml
 ```
 
 模块包新增导出子路径：`./public/*`、`./slots/*`、`./cards/*`、`./sitemaps/*`、`./feeds/*`。`./manifest` 仍是纯静态数据。
@@ -150,35 +160,40 @@ export interface FeedContribution { id: string; pattern: string; entry: string; 
 export default definePublicRoute<Data>({
   /** 服务端取数。只能用 ctx 给的能力；不能读 Cookie、请求头、会话。 */
   async load(ctx): Promise<PublicLoadResult<Data>>,
-  /** 由数据生成 SEO 元数据（§6）。 */
+  /** 由数据生成 SEO 元数据（§6）。ctx 不含 backend：元数据只能由 load 的数据推出。 */
   seo(data, ctx): PublicSeo,
   /** 页面组件（服务端组件），只拿 data 与 ctx 的只读部分。 */
   Page,
 });
 
 type PublicLoadResult<D> =
-  | { kind: "ok"; data: D; tags: string[]; cache?: CacheProfileName }   // tags 见 §8.3
-  | { kind: "not_found" }                                               // 404
-  | { kind: "unavailable" }                                             // 404 + noindex，短缓存（§7）
-  | { kind: "gone" }                                                    // 410
+  | { kind: "ok"; data: D; tags?: string[]; cache?: CacheProfileName }  // tags 见 §8.3；data 必须可被 RSC 序列化
+  | { kind: "not_found"; tags?: string[] }                              // 404
+  | { kind: "unavailable"; tags?: string[] }                            // 404 + noindex，短缓存（§7）
+  | { kind: "gone"; tags?: string[] }                                   // 页面层 404，记入已删除集合，此后 proxy 给 410
   | { kind: "redirect"; to: string; permanent: boolean }                // 308 / 307
 
 interface PublicRouteContext {
   params: Record<string, string>;   // 已按 params 校验
   query: Record<string, string>;    // 只含白名单内的参数
   locale: string;
-  site: { origin: string; name: string; consoleBasePath: string };
+  site: { origin: string; name: string; consoleBasePath: string; locale: string; timeZone: string };
   backend: PublicBackend;           // §5
   t: ServerTranslator;              // §12，按模块命名空间
-  href(routeKey: string, params: Record<string, string>): string;   // 按站点配置生成路径，模块间互链不写死 URL
+  href(routeKey: string, params?: Record<string, string>): string | null;   // 按站点配置生成路径；路由未装配返回 null
 }
+// Page 的 ctx 另有 renderSlot(target, { objectRef, summary }) 与 renderCards(cards, { styles, eagerImages })（§10）
 ```
 
-`load` 是缓存单元：底座以 `(路由 key, 规范化 params, 白名单 query, locale)` 为键缓存它的结果，并按返回的 `tags` 打标签。`Page` 不得再自行取数（需要的数据都在 `load` 里取齐，避免一页里出现多个缓存时效不一的主内容）；插槽有各自的缓存单元（§10.2）。
+`load` 是缓存单元：生成的路由文件里模块作用域的 `"use cache"` 函数以 `(规范化 params, 白名单 query)` 为键缓存它的结果（路由 key 与 locale 是该文件与部署的常量），按返回的 `tags` 打标签、按结果类型选档位（§8.1）。`"use cache"` 必须写在路由文件里而不是运行时包里：缓存函数只能闭包住可序列化的值，路由定义里有函数。`Page` 不得再自行取数（需要的数据都在 `load` 里取齐，避免一页里出现多个缓存时效不一的主内容）；插槽有各自的缓存单元（§10.2）。
 
 ### 4.2 路由实例
 
 `instantiable: true` 的路由可被站点配置复制成多个实例，每个实例有自己的 URL 与固定参数（`fixed`），例如同一个内容详情入口分别服务 `article` 与 `video` 两种类型。实例 key 形如 `content.item@video`。模块用 `ctx.params` 读固定参数，与 URL 参数无差别。
+
+### 4.3 查询参数
+
+Cache Components 下读 `searchParams` 就是请求期数据，页面再也不能整页缓存。所以底座把查询参数「挪进路径」：proxy 只保留 `query` 白名单里的参数（每个键取第一个非空值、单值 ≤ 512 字符）、按键排序、base64url 编码成一个路径段，内部改写到 `<路由>/~q/<编码>`；生成脚本为有 `query` 的路由多生成一个 `…/~q/[_q]/page.tsx` 变体，页面从参数里解码。效果：白名单外的参数（utm_* 等）到不了页面也不进缓存键；参数顺序不同命中同一份缓存；带查询的页面照样整页缓存、状态码照样准确。解码只接受规范形式，外部直接访问 `~q` 段由 proxy 拦成 404。
 
 ## 5. 服务端取数
 
@@ -191,11 +206,13 @@ interface PublicRouteContext {
 | 信封 | 与 `backendJson` 同一套解析：`code === 0` 取 `data`；机器码原样上抛为 `PublicBackendError(code, message, status)`，由 `load` 决定映射成 `not_found` / `unavailable` / `gone` 还是抛出 |
 | 超时 | 单请求缺省 3 秒，`load` 总预算 5 秒；超时与连不上抛出（走 §7 的 5xx 路径），不吞成空数据 |
 | 并行 | `load` 内多个请求用 `Promise.all`；同一渲染内对同一 URL 的 GET 自动去重 |
-| 动态路由 | 只有 `cache: "dynamic"` 的路由（如搜索）可以调用 `ctx.backend.withClient()`：转发 `forwardedClientHeaders`（X-Forwarded-For 等），让后端按真实客户端 IP 限流。部署时 Next 服务的出口地址必须在后端 `ratelimit.trusted_proxies` 里 |
+| 动态路由 | 只有 `cache: "dynamic"` 的路由（如搜索）由底座构造带客户端转发头（X-Forwarded-For、User-Agent）的取数客户端，让后端按真实客户端 IP 限流；模块代码拿不到请求头。后端只在对端地址属于 `ratelimit.trusted_proxies`（Next 服务的出口）时才信这个头——按来源地址认证，沿用框架现有的可信代理机制（R10），不另设共享密钥：多一把密钥不增加安全性（能伪造来源地址的人也拿得到同机的密钥），只增加配置面 |
 
-**为什么可缓存渲染不转发客户端 IP**：缓存后的结果会发给所有人，取数时是谁触发的无关紧要；把触发者的 IP 带进去只会让后端的限流误伤或被利用。后端对这些匿名只读接口的限流应以「渲染服务」整体为单位考虑（见 site-module §8 的开放项）。
+**为什么可缓存渲染不转发客户端 IP**：缓存后的结果会发给所有人，取数时是谁触发的无关紧要；把触发者的 IP 带进去只会让后端的限流误伤或被利用。
 
-**构建期检查**：生成脚本静态扫描模块的 `public/`、`slots/`（server 部分）、`cards/`、`sitemaps/`、`feeds/` 目录及其相对 import，出现 `next/headers`、`cookies(`、`@neton/application-client-runtime/server`（会话相关导出）、`apiFetch` 即失败。fork 手写的 `(public)` 页面同样受检。
+**限流决议**：匿名、可缓存的只读接口（详情、列表、栏目树、频道 / 楼层）**不按 IP 限流**——所有服务端渲染都来自 Next 的同一个出口，按 IP 限流等于所有访客一起被限（爬虫顺着分页走就会把 429 变成 500）；这类读取的滥用防护放在边缘（CDN / nginx）。搜索与写接口照常按真实客户端 IP 限流。filter 的三个匿名读接口已按此去掉 IP 限流（module-filter 0e6955d）；content、comment 的匿名读接口随 C2、C3 调整。
+
+**构建期检查**：生成脚本从每个服务端入口（模块的 public / cards / sitemaps / feeds、`rendering: "server"` 的插槽、fork 的 `src/site/pages/*` 与 `portal-shell.tsx`）出发，沿相对 import 与 `@/` 别名递归扫描（遇到 `"use client"` 文件停下，注释不算），出现 `next/headers`、`@neton/application-client-runtime/server`、`apiFetch` / `apiWrite`、`connection()` 即失败。
 
 ## 6. SEO 元数据
 
@@ -220,11 +237,12 @@ interface PublicSeo {
 
 规则：
 
-- **canonical**：相对路径一律拼站点 `origin`；绝对地址只有在与 `origin` 不同站时才保留（编辑明确指定的外站规范链接）。查询参数不进 canonical，带游标的列表页 canonical 指向自己（不指向第一页）。
+- **canonical**：缺省 = 当前路径 + 白名单内的规范查询串（带游标的列表页指向自己，不指向第一页）；模块给的相对路径拼站点 `origin` 且去掉查询参数；同站的绝对地址规范成本站地址；异站绝对地址（编辑指定的外站规范链接，如转载指向原文）原样保留。
 - **robots**：页面值与路由 `indexable` 取更严的一方；404 / 410 / `unavailable` 恒为 `noindex`；`max-image-preview:large` 缺省开启（资讯类在搜索结果里的大图依赖它）。
 - **Open Graph / Twitter**：底座由 `openGraph` 同时生成 `og:*` 与 `twitter:card`（有图 `summary_large_image`，否则 `summary`）；`og:site_name`、`og:locale` 自动填。
-- **JSON-LD**：每个对象单独一个 `<script type="application/ld+json">`；底座把 `<` 转义为 `<`，保证不能闭合脚本标签。运行时提供构造器（`seo.newsArticle()`、`seo.breadcrumb()`、`seo.itemList()`、`seo.person()`、`seo.webSite()`），字段规则写在构造器里，模块不手拼。站点级 `WebSite`（含站内搜索 `SearchAction`，有搜索路由时）与 `Organization` 由底座在首页输出。
+- **JSON-LD**：每个对象单独一个 `<script type="application/ld+json">`；底座把 `<`、`>`、`&` 与 U+2028/2029 转义，保证不能闭合脚本标签。运行时提供构造器 `jsonLd.article()`（NewsArticle / Article，headline 截 110 字符）、`breadcrumb()`、`itemList()`、`collectionPage()`、`webPage()`、`person()`、`webSite()`（有搜索路由时带 `SearchAction`）、`organization()`，字段规则写在构造器里，模块不手拼。站点级 `WebSite` 与 `Organization` 由**首页**（fork 页面）用构造器输出——底座不认识哪一页是首页；注册表导出 `searchRoute` 供首页拼 `SearchAction`。
 - **分页**：`pagination` 输出 `<link rel="prev/next">`（React 19 把它提升到 `<head>`）。Google 已不使用它，但百度等仍参考，成本为零。
+- **description** 按字素（`Intl.Segmenter`）截到 160，换行与连续空白压成一个空格；`verification` 的 Bing 输出为 `msvalidate.01`、百度为 `baidu-site-verification`。
 - **RSS 发现**：`alternates.feeds` 输出 `<link rel="alternate" type="application/rss+xml">`；站点 feed 由底座在所有公开页输出。
 - 站点验证（`verification`）输出为对应的 meta 标签。
 
@@ -237,9 +255,12 @@ interface PublicSeo {
 | `ok` | 200 | 按 §6 | 按路由档位 | — |
 | `not_found` | 404 | noindex | `list` 档（短） | ID 从未存在、参数不合法、类型不匹配 |
 | `unavailable` | 404 | noindex | 60 秒 | 对象暂时下线：撤回、归档、进回收站（`ObjectUnavailable(permanent = false)`），之后可能重新发布 |
-| `gone` | 410 | noindex | 1 天 | 对象已彻底删除（`ObjectUnavailable(permanent = true)`） |
+| `gone` | 页面层 404，此后 410（§7.2） | noindex | 1 天 | 对象已彻底删除（`ObjectUnavailable(permanent = true)`） |
 | `redirect` | 308（permanent）/ 307 | — | 按路由档位 | slug 变化、canonical 与当前 URL 不一致、跳转型内容 |
 | 抛出（后端不可用、超时） | 500 | — | 不缓存 | 有旧缓存时先给旧的（§8.2） |
+| 参数 / 查询段不合法 | 404 | noindex | `list` 档 | 不打后端 |
+
+决议（产品决定 4）：**删除 → 410**（proxy + 从 site 模块已删除台账同步的集合）；**撤回 / 下线 → 404 + noindex**；**从未存在 → 404**。
 
 为什么暂时下线用 404 而不是 410：410 会让搜索引擎更快、更彻底地丢弃 URL，只该在确定不会回来时使用；撤回后重新发布在资讯站很常见。
 
@@ -247,30 +268,41 @@ interface PublicSeo {
 
 App Router 的页面只能产出 404（`notFound()`）与重定向，不能产出 410。底座的做法：
 
-- `goneAware` 路由由底座的 `proxy.ts`（Next 16 的请求代理）先查**已删除 URL 集合**，命中即直接返回 410 页（静态 HTML，`noindex`），不进入页面渲染。
+- `goneAware` 路由由底座的 `proxy.ts`（Next 16 的请求代理）先查**已删除 URL 集合**，命中即由 proxy 直接返回 410：一份生成期按站点语言写好的独立静态 HTML（`<meta name="robots" content="noindex">` + `X-Robots-Tag: noindex`，文案取宿主 `site` 命名空间的 `status.gone.*`，缓存一天），不进入页面渲染。不用「改写到内部 410 页面 + 状态码」：C1 实测 Next 16 不保证改写后的响应带上 proxy 给的状态码（同一 URL 时而 410 时而 200）。
 - 集合的来源是服务端 site 模块的已删除台账：失效端点收到 `gone` 条目时加入（§8.5）；Next 服务启动时、以及每 10 分钟，从后端 `GET /platform/site/gone?since=` 增量同步（签名鉴权，site-module §6）。
-- 多实例部署时集合放在共享缓存里（与 §8.6 的共享缓存同一处）；单实例放进程内。
+- 多实例部署时集合放在共享缓存里（`setGoneStore()` 换实现，与 §8.6 的共享缓存同一处）；单实例放进程内，挂在 `process` 对象上：proxy 跑在自己的上下文里，能读到主上下文 `globalThis` 上已有的属性，自己写上去的属性主上下文却看不到（C1 实测：proxy 先访问时两边各建一份，集合分裂），`process` 是两边共享的同一个对象。
+- 站点配置 `robots.deadLinkFile = true` 时集合同时输出为 `/sitemaps/gone.txt`（§11.5）。
 - 页面 `load` 在后端返回「已删除」机器码时也返回 `gone`——此时底座以 404 输出（页面层做不到 410），并把路径加入集合，下一个请求起就是 410。
+
+### 7.3 `dynamic` 档只能是 200
+
+`dynamic` 路由（搜索）不缓存、每次渲染。Cache Components 下这类渲染先输出静态外壳，状态码在第一个字节时就是 200，之后的 `notFound()` 只能退化成 noindex（C1 原型实测，与 `ensureStatic` 的整页路由不同）。所以契约规定 `dynamic` 路由必须 `indexable: false`、不能 `goneAware`；空查询、被限流、后端出错都在页面里说明（`useDescribeError` 翻译机器码），HTTP 状态恒为 200。
 
 ## 8. 缓存与失效
 
 ### 8.1 档位
 
-两层缓存：Next 的渲染 / 数据缓存（Cache Components：`"use cache"` + `cacheTag` + `cacheLife`），以及 CDN 的 HTML 缓存。档位是契约，具体时长是底座缺省、站点可调：
+两层缓存：Next 的渲染 / 数据缓存（Cache Components：`"use cache"` + `cacheTag` + `cacheLife`，整页 ISR），以及 CDN 的 HTML 缓存。档位是契约，时长是运行时包 `PUBLIC_CACHE_PROFILES` 的常量（单一来源，调用处直接传对象，不在 `next.config` 再注册一份名字）：
 
-| 档位 | 用途 | Next 缓存（stale / revalidate / expire） | CDN（`Cache-Control`） |
-| --- | --- | --- | --- |
-| `object` | 详情页（文章、作者） | 60 秒 / 1 小时 / 7 天，**事件驱动失效为主** | `public, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400` |
-| `list` | 栏目、标签、榜单、首页楼层、sitemap 分片 | 30 秒 / 60 秒 / 1 小时 | `public, s-maxage=30, stale-while-revalidate=300, stale-if-error=86400` |
-| `static` | 单页、关于、协议 | 1 小时 / 1 天 / 30 天 | `public, s-maxage=300, stale-while-revalidate=86400` |
-| `dynamic` | 搜索 | 不缓存 | `private, no-store` |
+| 档位 | 用途 | stale / revalidate / expire |
+| --- | --- | --- |
+| `object` | 详情页（文章、作者） | 60 秒 / 60 秒 / 7 天，**事件驱动失效为主** |
+| `list` | 栏目、标签、频道、榜单、首页、sitemap 分片、外壳导航 | 30 秒 / 30 秒 / 1 小时 |
+| `static` | 单页、协议、robots、历史 sitemap 分片 | 5 分钟 / 5 分钟 / 30 天 |
+| `unavailable` | `load` 返回暂时下线 | 30 秒 / 60 秒 / 10 分钟 |
+| `gone` | `load` 返回已删除（页面层 404） | 5 分钟 / 1 天 / 7 天 |
+| `dynamic` | 搜索 | 不缓存，`private, no-store` |
 
-- CDN 层的 `s-maxage` 刻意短：CDN 刷新（site 模块的 CDN 端口）是可选能力，没有它时，短 TTL 是兜底的新鲜度上限。
-- 控制台、登录页、`/api/*` 恒为 `private, no-store`。
+- **CDN 的 `Cache-Control` 由 Next 生成**：整页里**最短**的档位决定 `s-maxage = revalidate`、`stale-while-revalidate = expire − revalidate`（例：首页 `s-maxage=30, stale-while-revalidate=3570`）。不另写一张 CDN 头的表：两套时长迟早不一致。revalidate 刻意短——没有 CDN 主动刷新时，它就是 CDN 层的新鲜度上限；事件驱动的失效（§8.4）才是主路径。Route Handler（sitemap、RSS、robots）用 `cacheControlFor(档位)` 输出同一形式。
+- 不输出 `stale-if-error`：渲染失败时 Next 自己继续给旧缓存；CDN 侧按产品的 CDN 配置开启回源失败给旧内容。
+- Next 的预渲染规则：stale ≥ 30 秒、expire ≥ 5 分钟，否则被排除出预渲染、变成请求期的动态洞，整页缓存不成立——档位都满足这两条。
+- **与签名媒体地址的约束（产品决定 1）**：infra 的 CDN 地址策略开启鉴权时（infra-media §7.3），站点配置 `media.signedUrlValiditySeconds` 必须与后端一致；`object` / `list` / `static` 的 revalidate 必须 ≤ 有效期 / 2，`resolveSite()` 在构建与启动时校验，不满足直接失败。超过 revalidate 之后的 stale-while-revalidate 窗口里给出的旧页面，以及长时间打开的标签页，由客户端的图片兜底刷新（infra-media §7.3）。
+- 控制台与 `/api/*` 恒为 `private, no-store`；页面渲染时不得读当前时间（版权年份等用 `"use cache"` 包成缓存单元）。
 
 ### 8.2 缓存安全
 
-- 公开路由的响应**绝不 `Set-Cookie`**，不 `Vary: Cookie`；CDN 的缓存键忽略 Cookie，并剥掉白名单外的查询参数（与 §4 的 `query` 一致）。
+- 公开路由的响应**绝不 `Set-Cookie`**，不 `Vary: Cookie`；CDN 的缓存键忽略 Cookie，并剥掉白名单外的查询参数（与 §4 的 `query` 一致）。C1 验收：带与不带会话 Cookie 拿到的首页、频道页 HTML 逐字节一致。
+- Next 的响应带 `Vary: rsc, next-router-state-tree, …`：门户页面之间一律整页导航（普通 `<a>`），不用客户端路由预取，CDN 只需按 URL 缓存文档请求；带 `RSC` 头的请求不缓存。
 - 渲染失败时：Next 缓存里有旧版本就继续给旧版本（stale-if-error），CDN 同理；5xx 不进缓存。
 - `origin` 来自站点配置，`X-Forwarded-Host` / `Host` 只用于 CSRF 同源判断，不参与任何 URL 生成。
 
@@ -285,7 +317,7 @@ App Router 的页面只能产出 404（`notFound()`）与重定向，不能产�
 | `site:nav` | 全站导航、栏目树 | 门户外壳 | 栏目树变化、频道列表变化 |
 | `site:config` | 站点级配置 | 外壳 | 手动 |
 
-- `type` 是 `ObjectRef.type`（如 `content.item`、`comment.comment`），`id` 原样。标签总长 ≤ 256，超出不打。
+- `type` 是 `ObjectRef.type`（如 `content.item`、`comment.comment`），`id` 原样；各段只允许 `[A-Za-z0-9._~-]`。标签总长 ≤ 256，超出不打。运行时构造器 `objTag` / `feedTag` / `nodeTag` / `threadTag` / `SITE_NAV_TAG` / `SITE_CONFIG_TAG`；失效端点只接受这几种形状（`isContractTag`）。
 - 列表缓存单元除了 `feed:{type}`，还要给列表里的**每个对象**打 `obj:` 标签：对象被撤回时，所有展示过它的列表立即失效，不必等 `feed` 的合并窗口。
 - 评论区插槽给渲染出的每条评论打 `obj:comment.comment:{id}`：管理员隐藏一条评论，只失效包含它的评论区。
 
@@ -300,11 +332,12 @@ App Router 的页面只能产出 404（`notFound()`）与重定向，不能产�
 
 | 方面 | 约定 |
 | --- | --- |
-| 鉴权 | 头 `X-Neton-Signature: t=<epoch 秒>,v1=<hex>`，`v1 = HMAC-SHA256(NETON_SITE_REVALIDATE_SECRET, t + "." + 原始 body)`，常数时间比较；`|now - t| > 300` 拒绝。失败 401，信封 `message = SIGNATURE_INVALID` / `SIGNATURE_EXPIRED` |
+| 鉴权 | 头 `X-Neton-Signature: t=<epoch 秒>,v1=<hex>`，`v1 = HMAC-SHA256(NETON_SITE_REVALIDATE_SECRET, t + "." + 原始 body)`，常数时间比较；`|now - t| > 300` 拒绝。失败 401，信封 `code = 10001`、`message = SIGNATURE_INVALID` / `SIGNATURE_EXPIRED`。密钥 < 32 字节视为未配置：端点 503 `REVALIDATE_DISABLED`，启动日志 `site.revalidate.disabled` |
+| 校验 | 标签必须是契约形状、`mode` 只有 refresh / expire、`eventId` 为 `[A-Za-z0-9._:-]{1,128}`；400 `REVALIDATE_INVALID`（code 10100）带字段错误；同一标签既 refresh 又 expire 时 expire 胜出 |
 | `mode` | `refresh` = `revalidateTag(tag, "max")`（先给旧的、后台刷新，用于上线与更新）；`expire` = 立即过期（`revalidateTag(tag, { expire: 0 })`，用于下线：撤回的内容不能再被任何人看到） |
 | `gone` / `revived` | 加入 / 移出已删除 URL 集合（§7.2）；路径必须以 `/` 开头且不在保留前缀里 |
 | 幂等 | 按 `eventId` 记最近 10 000 条，重复请求直接 200；即使不去重，标签失效本身也是幂等的 |
-| 限额 | 单次 ≤ 500 个标签、≤ 500 条路径；超出 400 `REVALIDATE_TOO_LARGE`，由调用方拆批 |
+| 限额 | 单次 ≤ 500 个标签、≤ 500 条路径；超出 400 `REVALIDATE_TOO_LARGE`（code 10106），由调用方拆批 |
 | 响应 | `{ code: 0, data: { applied: n } }`；不访问后端、不渲染页面，单次处理 < 100 ms |
 | 暴露面 | 部署时只对内网开放（反代不把 `/api/site/*` 暴露到公网，或按来源地址放行）；签名是第二道门 |
 
@@ -329,19 +362,20 @@ App Router 的页面只能产出 404（`notFound()`）与重定向，不能产�
 - 需要登录的操作（收藏、发评论、投票、举报）在匿名时调用运行时的 `requireLogin({ returnTo })`：跳 `/login?next=<当前路径 + 锚点>`。
 - 登录 / 注册 / 短信登录的 Route Handler 成功后按 `next` 跳回。`next` 必须是本站相对路径：以 `/` 开头、不以 `//` 或 `/\` 开头、不进 `/api/`，解码后再检查一次；不合格一律回 `consoleBasePath`。
 - 退出登录（`/api/auth/logout`）支持 `next`，门户上退出留在当前页。
-- 登录弹层（不离开页面）作为开放项（§16），默认整页跳转——简单、对密码管理器与验证码最友好。
+- **整页跳转（产品决定 6）**，不做登录弹层——简单、对密码管理器与人机验证最友好。
+- **短信验证码登录在底座**（产品决定 6）：登录页按站点配置 `auth.loginMethods` 显示「验证码登录 / 密码登录」页签，复用 account 模块已有的 App 接口——发码经 `/api/backend` 匿名代理调 `POST /app/auth/send-sms-code`（`scene = 1`，人机验证动作 `send_code`），登录走底座 `POST /api/auth/sms-login` → `/app/auth/sms-login`（号码首次出现时后端按注册策略开户）。网页登录统一带 `device.platform = "web"`。
 
 ### 9.3 运行时调整
 
 | 现状 | 调整 |
 | --- | --- |
 | `/api/backend` 代理没有 Cookie 时直接 401 | 没有 Cookie 时**不带 Authorization 转发**，是否允许匿名由后端接口决定（`@AllowAnonymous`）；仍只放行 `/app/*`，写请求仍过 CSRF 检查 |
-| `apiFetch` 遇到登录失效就 `location.href = "/login"` | 区分场景：控制台内跳 `/login?next=`；公开页内**不跳转**，抛出 `ApiError(kind = "unauthorized")`，由组件调用 `requireLogin` 或提示 |
-| i18n 在客户端从 localStorage / 浏览器偏好选语言 | 公开页用服务端确定的语言初始化，不读 localStorage（否则水合不一致），§12 |
+| `apiFetch` 遇到登录失效就 `location.href = "/login"` | 区分场景：当前地址在控制台前缀下才跳 `/login?next=<当前地址>`（前缀经构建期常量 `NEXT_PUBLIC_NETON_CONSOLE_BASE_PATH` 给到客户端）；公开页内**不跳转**，抛出 `ApiError(kind = "unauthorized")`，由组件调用 `requireLogin` 或提示 |
+| i18n 在客户端从 localStorage / 浏览器偏好选语言 | 公开页 `I18nProvider serverLocale`：用服务端确定的语言初始化，不读不写 localStorage（否则水合不一致）；公开岛屿要用到的模块词条由公开布局在服务端一次性给出，首帧就有译文，§12 |
 
 ### 9.4 批量状态
 
-一页上常有多个需要「我的状态」的组件（收藏按钮、点赞、评论区里每条评论的我的投票）。运行时提供 `ObjectStateBatcher`：同一渲染帧内的请求按接口合并成一次（如 interaction 的 `POST state` 一次带上全页的对象），结果按对象分发。模块注册自己的批量加载器，不互相认识。
+一页上常有多个需要「我的状态」的组件（收藏按钮、点赞、评论区里每条评论的我的投票）。运行时提供 `ObjectStateBatcher`（**随 C3/C4 的第一个使用方落地**，C1 未实现）：同一渲染帧内的请求按接口合并成一次（如 interaction 的 `POST state` 一次带上全页的对象），结果按对象分发。模块注册自己的批量加载器，不互相认识。
 
 ### 9.5 水合一致性
 
@@ -354,15 +388,16 @@ App Router 的页面只能产出 404（`notFound()`）与重定向，不能产�
 ### 10.1 门户外壳
 
 ```
-src/app/(public)/layout.tsx          底座：会话提供者、主题、站点级 JSON-LD；渲染 <PortalShell>
+src/app/(public)/layout.tsx          底座：PublicFrame（服务端语言、预载词条、会话水合）+ <PortalShell>
+src/app/(public)/not-found.tsx       底座：外壳内的 404 状态页（站点级 404 同样套外壳）
 src/site/portal-shell.tsx            fork：页头、导航、页脚（底座给最小默认）
-src/app/(public)/page.tsx            fork：首页（底座不提供首页）
-src/app/(public)/(modules)/…         生成：模块公开路由（不入库）
-src/app/(public)/<fork 手写页>        fork：产品特有页面（如频道页）
+src/site/pages/<entry>.tsx           fork：公开页面（definePublicPage），在 site.config `pages` 里声明
+src/app/(public)/(site)/…            生成：fork 页面的路由文件（不入库）
+src/app/(public)/(modules)/…         生成：模块公开路由与模块 feed（不入库）
 ```
 
-- `PortalShell` 的入参：`{ children, nav, slots }`。`nav` 由外壳自己在服务端取（打 `site:nav` 标签）；`slots` 是全局插槽（§10.2）的渲染结果。
-- fork 手写的公开页面用同一套运行时能力（`definePublicPage`，与 `definePublicRoute` 相同的 load / seo / Page 结构），遵守同样的禁止项（§5 构建期检查）。
+- `PortalShell` 的入参：`{ children, brand, locale, origin, consoleBasePath }`（`shell-types.ts`）。导航由外壳自己在服务端取（`"use cache"`，打 `site:nav` 标签）；用户菜单是客户端岛。外壳随每个公开页缓存，不读请求（构建期扫描覆盖它）；当前导航项在水合后由客户端标记 `aria-current`。
+- fork 的公开页面用同一套运行时能力（`definePublicPage`，与 `definePublicRoute` 相同的 load / seo / Page 结构；命名空间 `site`），在站点配置 `pages` 里声明（key `site.<名称>`），遵守同样的禁止项与冲突检查。
 
 ### 10.2 插槽
 
@@ -379,29 +414,29 @@ src/app/(public)/<fork 手写页>        fork：产品特有页面（如频道�
 | `console.header.actions` | 底座（控制台） | — | 「回复我的」红点 |
 
 - `summary` 是对象详情里取到的对外信息（`capabilities`、计数、`link.web`），贡献方据 `capability` 过滤，**不能**拿它代替后端的授权检查。
-- 渲染方式：`server` 是服务端组件，自己是一个缓存单元（自己的 `load` 与 `tags`）；`client` 是客户端岛；`hybrid` 是服务端出首屏（可收录）+ 客户端岛以服务端数据为初始值接管交互。
-- 一个插槽里多个贡献按 `order`，站点配置 `slots.order` / `slots.hide` 可覆盖。贡献的服务端部分失败只影响自己（错误边界内显示空），不让整页 500。
+- 渲染方式：`server` 是服务端组件，自己负责缓存（`"use cache"` + 标签）；`client` 是客户端岛（`"use client"`，首屏按匿名态渲染）。「服务端出首屏（可收录）+ 客户端接管交互」就是一个 server 组件里渲染一个以服务端数据为初始值的 client 组件，不单列 `hybrid`。贡献方拿到的参数是 `{ objectRef, summary, locale }`（server 另有 `site`）。
+- 一个插槽里多个贡献按站点配置 `slots.order[target]` 列出的顺序在前，其余按 `order`（缺省 100）再按 id；`slots.hide` 隐藏。server 贡献抛错时记日志、渲染为空；client 贡献包在错误边界里。都不让整页 500。
 
 ### 10.3 卡片渲染器
 
-列表、首页楼层、筛选器卡片流（`/app/channel/{code}` 返回的 `Card`）里的对象按 `ref.type` 选渲染器：模块用 `cardRenderers` 注册（content 注册 `content.item`，comment 注册 `comment.comment`），没有渲染器的类型退回底座的 `ObjectSummary` 通用卡片。渲染器是服务端组件，入参 `{ card, style }`（`style` 来自挂载的 `cardStyle`）。
+列表、首页楼层、筛选器卡片流（`/app/channel/{code}` 返回的 `Card`）里的对象按 `ref.type` 选渲染器：模块用 `cardRenderers` 注册（content 注册 `content.item`，comment 注册 `comment.comment`），没有渲染器的类型退回底座的 `ObjectSummary` 通用卡片（标题 + 摘要 + `link.web`，同源链接转站内路径）。渲染器是服务端组件，入参 `{ card, style, eager, ctx }`（`style` 来自挂载的 `cardStyle`；`eager` = 首屏前几张，图片不懒加载）。页面经 `ctx.renderCards(cards, { styles, eagerImages })` 调用。
 
 ## 11. robots、sitemap、RSS
 
 ### 11.1 robots.txt
 
-底座生成：`Allow: /`；`Disallow:` 控制台前缀、`/api/`、登录注册页、站点配置的 `robots.disallow`；末尾 `Sitemap: {origin}/sitemap.xml`。不按搜索引擎分别写规则（需要时站点配置扩展）。
+底座生成：`Allow: /`；`Disallow:` 控制台前缀（`/my/` 与 `/my$`，不误伤 `/mything`）、`/api/`、登录注册页、站点配置的 `robots.disallow`；末尾 `Sitemap: {origin}/sitemap.xml`。只有控制台的产品（前缀为 `/`）输出 `Disallow: /`。不按搜索引擎分别写规则（需要时站点配置扩展）。
 
 ### 11.2 sitemap
 
-- `/sitemap.xml` 是**索引**，列出所有贡献的全部分片：`/sitemaps/{贡献 id}-{分片 id}.xml`，以及有 news 贡献时的 `/sitemaps/news.xml`。
+- `/sitemap.xml` 是**索引**，列出所有贡献的全部分片：`/sitemaps/{贡献 id}.{分片 id}.xml`（两段都是 `[a-z0-9][a-z0-9-]{0,63}`，用 `.` 分隔避免 `content` + `terms-all` 与 `content-terms` + `all` 的歧义），以及有 news 贡献时的 `/sitemaps/news.xml`。贡献 id 不能是 `news` / `gone`。
 - 贡献入口导出：
 
 ```ts
 export default defineSitemap({
   async shards(ctx): Promise<{ id: string; lastmod?: string }[]>,         // 分片要稳定：已有分片的 id 不随新内容变化
-  async urls(shardId, ctx): Promise<{ loc: string; lastmod?: string; images?: { loc: string }[] }[]>,  // ≤ 50 000 条
-  async news?(ctx): Promise<{ loc: string; title: string; publishedAt: string; language: string }[]>,  // 近 48 小时，≤ 1000 条
+  async urls(shardId, ctx): Promise<{ urls: { loc: string; lastmod?: string; images?: { loc: string }[] }[]; tags?: string[] } | null>,  // ≤ 50 000 条；null = 分片不存在
+  async news?(ctx): Promise<{ urls: { loc: string; title: string; publishedAt: string; language: string }[]; tags?: string[] }>,  // 近 48 小时，≤ 1000 条
 });
 ```
 
@@ -411,7 +446,7 @@ export default defineSitemap({
 
 ### 11.3 RSS
 
-- 站点 feed `/rss.xml`（底座，聚合所有声明了 `site: true` 的 feed 贡献，按时间合并，前 50 条）；模块 feed 按 `pattern`（如 `/category/:slug/rss.xml`）。
+- 站点 feed `/rss.xml`（底座，聚合所有声明了 `site: true` 的 feed 贡献，按时间合并，前 50 条；没有站点 feed 贡献时 404；有贡献时站点配置必须给 `feeds.site.title`）；模块 feed 按 `pattern`（如 `/category/:slug/rss.xml`），生成为各自的 Route Handler。
 - RSS 2.0，带 `atom:link rel="self"`；条目 `title`、`link`（规范地址）、`guid`（同 link，`isPermaLink="true"`）、`pubDate`、`description`（摘要，不输出全文，开放项 §16）、`category`。
 - 缓存走 `list` 档。
 
@@ -426,7 +461,7 @@ export default defineSitemap({
 ## 12. 国际化
 
 - 第一版：公开页**每个部署一种语言**（`locales.prefix = "none"`），即站点配置的 `locales.default`；`<html lang>` 由服务端设置。
-- 服务端翻译：运行时新增 `getServerT(namespace, locale)`（读同一份模块语言包与宿主静态词条），公开页、插槽的服务端部分、sitemap / RSS 里的文案都用它。模块里不得出现硬编码中文（与控制台同一条检查）。
+- 服务端翻译：运行时 `createServerI18n()` → `getServerT(namespace, locale)`（读同一份模块语言包与宿主静态词条：运行时、`console`、`site`），公开页、插槽的服务端部分、sitemap / RSS 里的文案都用它。`pnpm check:locales` 检查各命名空间 key 集合与参数一致、已国际化模块的源码（控制台页面、公开路由、插槽、卡片、sitemap、feed）与宿主源码不得硬编码中文（行尾 `// i18n-exempt` 只给语言自称一类不该翻译的文字）。
 - 客户端岛：公开布局用服务端语言初始化 `I18nProvider`，不读 localStorage；只有一种语言时不显示语言切换。
 - 预留：`prefix: "non-default"` 时非默认语言加前缀（`/en/...`），每条路由按语言生成、输出 `hreflang` 备选。契约里的 `ctx.locale`、`alternates.languages` 现在就有，到时不改接口。
 - 错误：公开页上的客户端岛同样用 `useDescribeError("<模块 id>")`；服务端 `load` 的错误不显示给用户（映射成状态码或抛出）。
@@ -436,34 +471,41 @@ export default defineSitemap({
 - client-contract 1.1.0 只增字段；1.0.0 的模块不受影响。
 - 注册表生成脚本的兼容规则从「major 相同」改为「major 相同且模块 minor ≤ 底座 minor」：用到 `publicRoutes` 等字段的模块声明 `contractVersion: "1.1.0"`，装在 1.0 底座上直接构建失败，而不是静默忽略字段。
 - 路由 key、插槽 id、标签命名（§8.3）、失效端点的请求格式是契约，变更按 semver。
-- **改 URL 形态是 SEO 层面的破坏性变更**：模块改缺省 `pattern`、或 fork 改 `override` 时，旧形态必须写进 `legacyPatterns`（模块）或站点配置的 `routes.legacy`（fork），底座生成 308；构建期比对上次构建的路由清单（`src/generated/public-routes.json` 入库），发现形态消失而没有 legacy 声明即失败。
+- **改 URL 形态是 SEO 层面的破坏性变更**：模块改缺省 `pattern`、或 fork 改 `override` 时，旧形态必须写进 `legacyPatterns`（模块）或站点配置的 `routes.legacy`（fork），proxy 生成 308（保留查询串）；构建期比对上次构建的路由清单（`src/generated/public-routes.json`，生成物里唯一入库的文件），发现形态变化而没有 legacy 声明即失败；路由整个消失（卸了模块）必须在 `routes.disable` 里列出以确认其 URL 从此 404。
 
 ## 14. 构建期检查（注册表生成脚本）
 
-1. 路由 key 全局唯一；实例 key 不与模块路由重名。
+1. 路由 key 全局唯一、以模块 id 为前缀；实例 key 为 `<路由 key>@<名称>`；fork 页面 key 为 `site.<名称>`。
 2. 覆盖后的 `pattern` 两两不冲突（同形态、或静态段与参数段在同一位置互相遮挡）、不占保留前缀、不与 fork 手写的 `(public)` 页面冲突。
 3. `override` 只改形态：参数名集合不变。
 4. 有公开路由时 `consoleBasePath ≠ "/"`。
 5. `entry` 都能解析；`slots`、`cardRenderers`、`sitemaps`、`feeds` 的入口同理；插槽 `target` 必须是已声明的插槽。
-6. §5 的禁止 import 扫描。
+6. §5 的禁止访问扫描。
+9. 每个 `:name` 都有规则、规则里没有多余参数；`dynamic` 路由不得 indexable、不得 goneAware；插槽 id 以模块 id 为前缀、target 已声明；同一对象类型只有一个卡片渲染器。
 7. §13 的 URL 形态回归检查。
 8. contract 版本兼容（§13）。
 
 ## 15. 实施分期（底座部分）
 
-| 期 | 内容 | 验收 |
+| 期 | 内容 | 状态 |
 | --- | --- | --- |
-| P1 | 契约类型 1.1.0；`consoleBasePath` 与控制台路由生成；`front-workspace` 前缀支持（上游）；`(public)` 布局、外壳文件、`definePublicRoute` / `definePublicPage`；`ctx.backend`；§6 元数据渲染与 JSON-LD 构造器；状态映射（不含 410）；会话水合、`requireLogin`、`next` 跳回；代理匿名转发；服务端翻译；构建期检查 1–6、8 | 一个只装 client-account 的 fork 行为不变；一个示例模块的公开页匿名可访问、HTML 含完整主内容与元数据、Lighthouse SEO 100 |
-| P2 | 缓存档位与 CDN 头；标签；失效端点；插槽与卡片渲染器；`ObjectStateBatcher` | 改一篇内容后 5 秒内（不含 CDN）页面更新；撤回后立即 404；带 Cookie 访问公开页的响应字节与匿名一致 |
-| P3 | robots / sitemap / RSS；410（proxy + 已删除集合同步）；URL 形态回归检查 | sitemap 通过 Search Console 与百度资源平台校验；删除的 URL 返回 410 |
+| P1 | 契约类型 1.1.0；`consoleBasePath` 与控制台路由生成；`front-workspace` 前缀支持（上游 ecadcb6）；`(public)` 布局、外壳文件、`definePublicRoute` / `definePublicPage`；`ctx.backend`；§6 元数据渲染与 JSON-LD 构造器；状态映射；会话水合、`requireLogin`、`next` 跳回；代理匿名转发；服务端翻译；构建期检查 1–9；短信登录 | **C1 已实现** |
+| P2 | 缓存档位与 CDN 头；标签；失效端点；插槽与卡片渲染器；`ObjectStateBatcher` | C1 已实现（除 `ObjectStateBatcher` → C3/C4 随第一个使用方） |
+| P3 | robots / sitemap / RSS 管线；410（proxy + 已删除集合 + 同步客户端）；死链文件；IndexNow 密钥文件；URL 形态回归检查与 legacy 308 | C1 已实现管线；内容的 sitemap / RSS 贡献随 client-content（C2），已删除台账的服务端随 site 模块 S1（C2） |
+| — | 多实例的共享缓存处理器（`cacheHandlers`）与共享的已删除集合 | 扩容时做；第一版单实例 |
 
-## 16. 开放项
+C1 验收（itwind-client 真实运行，Playwright 12/12）：首页 HTML 含完整主内容与元数据、首屏不靠客户端取数（只有一次 `/api/session`）；带与不带 Cookie 的 HTML 逐字节一致；未知频道与不合法参数 404、内部 `~q` 段 404、已删除地址 410（noindex）、恢复后 404；失效端点错签 / 无签 401、错标签 400、正确签名 200 且按 eventId 幂等；robots 与 sitemap 索引、分片可用；`/my/account/profile` 未登录 → `/login?next=…` → 短信验证码登录后回到原页；门户页上账密登录回到原页；`next=//evil.example` 被拒、落在控制台首页。底座自身：生成脚本与运行时单测 87 项。
 
-| 项 | 默认 |
+## 16. 开放项（已关闭）
+
+| 项 | 决议与理由 |
 | --- | --- |
-| 登录用整页跳转还是弹层 | 整页跳转（§9.2）；弹层以后作为可选外壳能力 |
-| RSS 是否输出全文 | 只输出摘要（防整站被聚合器转载） |
-| 410 是否值得 proxy 的成本 | 值得：只对 `goneAware` 路由生效，集合在内存里查，CDN 命中时不经过 proxy |
-| 共享缓存处理器选型 | 第一版单实例，不需要；扩容时用 Redis |
-| 是否需要按语言前缀的多语言门户 | 第一版不做，契约预留（§12） |
-| `/api/site/revalidate` 的网络隔离由谁保证 | 部署（反代不暴露）+ 签名，两道都要 |
+| 登录用整页跳转还是弹层 | 整页跳转（产品决定 6）；短信登录进底座 |
+| RSS 是否输出全文 | 只输出摘要：防整站被聚合器转载，摘要已足够让订阅者判断 |
+| 410 是否值得 proxy 的成本 | 值得：只对 `goneAware` 路由匹配、集合查找是内存操作，CDN 命中时根本不经过 proxy；410 让搜索引擎更快、更彻底地丢弃删除的地址（产品决定 4） |
+| 共享缓存处理器选型 | 第一版单实例不需要；扩容时用 Redis，与已删除集合放在同一处 |
+| 是否需要按语言前缀的多语言门户 | 不做；契约预留（§12），单语言部署 |
+| `/api/site/revalidate` 的网络隔离由谁保证 | 部署（反代不把 `/api/site/*` 暴露到公网）+ 签名，两道都要 |
+| 搜索被限流时的状态码 | `dynamic` 档只能 200（流式输出后状态码不可改，C1 实测）：页面内提示 + noindex，不返回 429 |
+| 匿名读接口的限流 | 不按 IP 限流，搜索与写接口按真实客户端 IP（产品决定 8，§5） |
+| 外壳与首页谁输出站点级 JSON-LD | 首页（fork 页面）用构造器输出：底座不认识首页 |
