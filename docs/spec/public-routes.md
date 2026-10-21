@@ -1,7 +1,7 @@
 # 公开路由契约：匿名可缓存的 SSR 页面
 
 > 标识：NETON-APP-CLIENT-PUBLIC
-> 日期：2026-10-22 · 状态：**Accepted r2**（C1 已实现：契约 1.1.0、注册表生成、渲染管线、SEO 元数据、404 / 410 / 308、缓存档位与标签、失效端点、插槽与卡片、robots / sitemap / RSS 管线、短信登录与 `next` 跳回、控制台前缀；其余分期见 §15）
+> 日期：2026-10-22 · 状态：**Accepted r3**（C2 补充：密封构建 §1b、部署约束 §2.1a、媒体图片 §10.4、样式表分离 §10.5、底座端到端测试 §15；C1 已实现：契约 1.1.0、注册表生成、渲染管线、SEO 元数据、404 / 410 / 308、缓存档位与标签、失效端点、插槽与卡片、robots / sitemap / RSS 管线、短信登录与 `next` 跳回、控制台前缀；其余分期见 §15）
 > 范围：`neton-application-client` 底座新增「公开路由」贡献点，让模块贡献匿名、可被 CDN 缓存、可被搜索引擎收录的 SSR 页面；产品 fork 提供门户外壳。client-contract 由 1.0.0 升到 **1.1.0**（只增不改）。
 > 关联：
 > - 后台底座规范 `privchat-docs/spec/07-application/NETON_APPLICATION_FRONT_SPEC.md`（模块契约、构建期注册表、RSC 非契约、贡献点）
@@ -28,7 +28,8 @@
 ## 1. 决议（已冻结）
 
 1. 公开页面由模块在 manifest 的 `publicRoutes` 里声明，构建期生成**真实的 Next 路由文件**（不是 catch-all），每条路由有自己的元数据、状态码与缓存配置。产品 fork 的公开页面（首页等）在站点配置 `pages` 里声明、入口放 `src/site/pages/*.tsx`，走同一条生成管线与同一套检查。
-1a. 缓存模型是 Next 16 的 Cache Components：生成的路由文件里 `load` 包一层模块作用域的 `"use cache"` 函数，并导出 `ensureStatic = "navigation"` 与一组**必然不合法的参数**作为 `generateStaticParams`。理由（C1 原型实测）：不加 `ensureStatic` 时，未预渲染参数的第一次请求先发出 App Shell，200 已经提交，`notFound()` 退化成 200 + noindex、`redirect()` 退化成客户端跳转；加上之后第一次请求也等完整页面，404 / 308 准确，结果进 ISR 缓存。哨兵参数让构建期只预渲染出一个 404（Cache Components 要求至少一组参数），构建不需要连后端；没有参数的页面（首页）在构建期真实预渲染，构建机需要能访问后端（连不上即构建失败，不把空页面烤进缓存）。
+1a. 缓存模型是 Next 16 的 Cache Components：生成的路由文件里 `load` 包一层模块作用域的 `"use cache"` 函数，并导出 `ensureStatic = "navigation"` 与一组**必然不合法的参数**作为 `generateStaticParams`。理由（C1 原型实测）：不加 `ensureStatic` 时，未预渲染参数的第一次请求先发出 App Shell，200 已经提交，`notFound()` 退化成 200 + noindex、`redirect()` 退化成客户端跳转；加上之后第一次请求也等完整页面，404 / 308 准确，结果进 ISR 缓存。哨兵参数让构建期只预渲染出一个 404（Cache Components 要求至少一组参数），构建不需要连后端。
+1b. **构建是密封的（C2 起）：`next build` 不发任何后端请求。** 没有路径参数的可缓存路由（fork 首页 `/`、`/hot`）不再生成裸路由文件，只生成查询变体 `…/~q/[_q]`，proxy 把裸地址也改写进去（`/` → `/~q/-`，`-` 是「没有查询参数」的规范段，带路径参数的路由不接受它）。于是它们与带参数的路由同形：按需渲染 + `ensureStatic`，第一次请求等完整页面（状态码准确、不出 App Shell），结果进 ISR；构建期只预渲染哨兵 `~q/_`（404）。依赖后端的 Route Handler（sitemap 索引、站点与模块 feed）先 `connection()` 再读各自的 `"use cache"` 内容单元（按请求响应、内容照样缓存）；品牌配置在构建期直接用站点配置的兜底值（只影响构建期预渲染的哨兵页、登录注册页与站点 404，30 秒后运行期重新生成）。被否决的方案：首页 `connection()` 变动态——Cache Components 下会先流出外壳，状态码在第一个字节时就是 200；首页加假参数段——URL 变形。证据：底座端到端测试把构建期后端指向一个只计数的「绊线」服务，断言请求数为 0，并验证首页第一次请求即完整 200（`e2e/run.mts`）。
 2. 公开页面的取数在服务端完成，打的是部署配置里的后端内网地址；**可缓存的渲染不携带任何会员身份**（不转发 Cookie、不带 Authorization、不读 `cookies()` / `headers()`）。
 3. 缓存的 HTML 里**没有任何个性化数据**；登录态、收藏状态、我的投票等一律在客户端水合后取。
 4. 规范链接（canonical）、站点地址一律取站点配置的 `origin`，**从不取请求的 Host**（防缓存投毒）。
@@ -55,6 +56,10 @@
 - 控制台的路由文件由注册表生成脚本按前缀生成到 `src/app/(console)/<base>/…`（`layout.tsx` 带 `instant = false`，只 re-export 入库的 `src/console/layout.tsx`、`page.tsx`；生成物不入库）；模块 manifest 里 `pages[].path` 仍写相对路径（如 `/account/profile`），实际地址是 `{consoleBasePath}/account/profile`。模块里的 `KitLink` / `WorkspaceLink` 照写工作区地址，渲染 `<a href>` 时自动加前缀；工作区之外的跳转用运行时的 `consoleHref(path)`，**禁止**写死前缀。
 - 工作区宿主的前缀支持已在 `neton-application-front` 的 `front-workspace` 落地（ecadcb6）：`createBrowserHistoryHost({ basePath })`，工作区内部地址（manifest path、页签、持久化）一律不带前缀，只有地址栏与 `<a href>` 加前缀（适配器新增 `toExternal` / `toInternal`，kit 导航新增 `hrefOf`）；admin 线传空串，行为不变。
 - 没有会话 Cookie 访问控制台：proxy 直接 307 到 `/login?next=<原地址>`（原地址就是控制台首页时省略 `next`，缺省即回控制台首页）；Cookie 在但会话失效时由受保护布局按 proxy 放进请求头的原地址跳登录。
+
+### 2.1a 部署约束：不以 IP 字面量绑定
+
+`next start -H 127.0.0.1`（或 standalone 的 `HOSTNAME=127.0.0.1`）时，Next 16.4 把 proxy 看到的 `request.nextUrl` 建成 `http://localhost:<port>`，路由层却按 `http://127.0.0.1:<port>` 判断改写目标是否同源——源不一致，改写被当成外部代理，`~q` 查询段与无参数页面全部落空成 404（底座端到端测试实测；`skipProxyUrlNormalize` 不改变这一点）。Next 服务绑 `0.0.0.0` 或 `localhost`，内网隔离交给防火墙与反代（§8.4 暴露面同理）。底座端到端测试按此启动。
 
 ### 2.2 保留前缀
 
@@ -336,10 +341,12 @@ App Router 的页面只能产出 404（`notFound()`）与重定向，不能产�
 | 校验 | 标签必须是契约形状、`mode` 只有 refresh / expire、`eventId` 为 `[A-Za-z0-9._:-]{1,128}`；400 `REVALIDATE_INVALID`（code 10100）带字段错误；同一标签既 refresh 又 expire 时 expire 胜出 |
 | `mode` | `refresh` = `revalidateTag(tag, "max")`（先给旧的、后台刷新，用于上线与更新）；`expire` = 立即过期（`revalidateTag(tag, { expire: 0 })`，用于下线：撤回的内容不能再被任何人看到） |
 | `gone` / `revived` | 加入 / 移出已删除 URL 集合（§7.2）；路径必须以 `/` 开头且不在保留前缀里 |
-| 幂等 | 按 `eventId` 记最近 10 000 条，重复请求直接 200；即使不去重，标签失效本身也是幂等的 |
+| 幂等 | 按 `eventId` 记最近 10 000 条，重复请求直接 200（`duplicate: true`）；即使不去重，标签失效本身也是幂等的 |
 | 限额 | 单次 ≤ 500 个标签、≤ 500 条路径；超出 400 `REVALIDATE_TOO_LARGE`（code 10106），由调用方拆批 |
 | 响应 | `{ code: 0, data: { applied: n } }`；不访问后端、不渲染页面，单次处理 < 100 ms |
 | 暴露面 | 部署时只对内网开放（反代不把 `/api/site/*` 暴露到公网，或按来源地址放行）；签名是第二道门 |
+
+**已知竞态（stale-while-revalidate 固有）**：一个页面正处于「先给旧的、后台重渲染」状态时，若数据在后台渲染**开始之后**才变化、`expire` 又在这次后台渲染**写回之前**到达，写回的结果仍是变化前的数据（Next 不按失效时间丢弃在途的后台渲染）。窗口等于一次渲染耗时；之后的 `refresh` / 档位到期会纠正。对下线（撤回）这类必须立即生效的变化，site 模块的投递在 `expire` 成功后 1 秒内对同一组标签再投一次 `expire`（site-module §5.1），即可覆盖这个窗口。
 
 ### 8.5 失效顺序
 
@@ -421,6 +428,32 @@ src/app/(public)/(modules)/…         生成：模块公开路由与模块 feed
 
 列表、首页楼层、筛选器卡片流（`/app/channel/{code}` 返回的 `Card`）里的对象按 `ref.type` 选渲染器：模块用 `cardRenderers` 注册（content 注册 `content.item`，comment 注册 `comment.comment`），没有渲染器的类型退回底座的 `ObjectSummary` 通用卡片（标题 + 摘要 + `link.web`，同源链接转站内路径）。渲染器是服务端组件，入参 `{ card, style, eager, ctx }`（`style` 来自挂载的 `cardStyle`；`eager` = 首屏前几张，图片不懒加载）。页面经 `ctx.renderCards(cards, { styles, eagerImages })` 调用。
 
+### 10.4 媒体图片（C2）
+
+公开页的图片一律经运行时的 `<MediaImage>`（`@neton/application-client-runtime/public`），地址由后端 infra 按 CDN 地址策略生成（infra-media §7.3，产品决定 1）：
+
+```ts
+type PublicMedia = { fileId: string; url: string; mimeType?: string | null; width?: number | null; height?: number | null; variants?: Record<string, string> | null };
+<MediaImage media={m} alt="…" displayWidth={720} aspect="3:2" priority sizes="…" className="…" />
+```
+
+| 方面 | 约定 |
+| --- | --- |
+| 渲染 | 服务端组件，输出一个普通 `<img>`，**没有客户端 JS**；不经 Next 的图片优化（缩放交给 CDN 的图片处理参数） |
+| 规格 | 后端按固定宽度档给出完整（已签名）地址 `variants`：`w180`、`w360`、`w720`、`w1080`、`w1440`（限宽、保持比例）与 `og`（1200×675）。`srcset` 列出全部宽度档；`src` 取不小于 2 × `displayWidth` 的最小一档；没有派生规格时只给原图 |
+| CLS | 一律带 `width` / `height`：原图宽高；只有比例时按 `aspect` 给名义尺寸，并用 CSS `aspect-ratio` + `object-fit: cover` 裁到该比例 |
+| 加载 | `priority`（详情首图、列表前几张、焦点图第一张）：`loading="eager"`、`fetchpriority="high"`，并经 React `preload()` 在 `<head>` 输出 `<link rel="preload" as="image" imagesrcset imagesizes>`；其余 `loading="lazy"`、`decoding="async"` |
+| 加载器 | 可替换：fork 覆盖 `src/site/media-loader.ts`（与 `portal-shell.tsx` 同一规则），由 `public-runtime` 在加载时 `setMediaLoader()`。地址仍由后端生成，网页端不能自己拼签名 |
+| 过期兜底 | 公开外框在 `<body>` 开头输出一段不依赖 React 的内联脚本（`MEDIA_REFRESH_SCRIPT`）：捕获阶段监听 `error`，对带 `data-neton-media` 的图片调一次 `GET /api/backend/app/infra/media/url/{fileId}?variant=`，去掉 `srcset` 换上新地址；每张图只重试一次 |
+| 分享图 | `shareImageUrl(media)`：有 `og` 规格用它（1200×675），否则原图 |
+| 运行期交叉校验 | 服务启动时读 `GET /app/infra/media/policy`（`{ strategy, validitySeconds, bucketSeconds, imageParams }`），与站点配置 `media.signedUrlValiditySeconds` 不一致即记错误日志 `site.media.policy.mismatch`，并以较短者为准：会渲染媒体的档位（object / list / static）经 `cacheProfile()` 收紧到 `revalidate ≤ 有效期 / 2`；后端暂时连不上时按退避重试，在那之前按站点配置运行 |
+
+私密媒体（会员可见、仅本人、临时文件）永不出现在公开 HTML 里：后端对匿名访问者不给出它们的地址，公开页在服务端也拿不到。
+
+### 10.5 样式表
+
+门户与控制台各自一份样式表：公开页（PublicFrame）只加载 `src/site/public.css`——Tailwind 只扫描门户外壳与 fork 页面（`src/site`）、生成的公开路由、站点 404 与各模块的 `src/{public,cards,slots}`，加上共享的设计令牌 `src/styles/tokens.css`；控制台与登录注册页加载 `src/styles/console.css`（整个工作区与模块控制台页面）。门户专属样式（品牌色等）写在 fork 的 `src/site/portal.css`。字体一律系统字体栈，不加载网络字体。端到端测试断言公开页只有一个样式表且不含控制台规则（夹具门户 gzip 后约 4 KB）。
+
 ## 11. robots、sitemap、RSS
 
 ### 11.1 robots.txt
@@ -492,9 +525,12 @@ export default defineSitemap({
 | P1 | 契约类型 1.1.0；`consoleBasePath` 与控制台路由生成；`front-workspace` 前缀支持（上游 ecadcb6）；`(public)` 布局、外壳文件、`definePublicRoute` / `definePublicPage`；`ctx.backend`；§6 元数据渲染与 JSON-LD 构造器；状态映射；会话水合、`requireLogin`、`next` 跳回；代理匿名转发；服务端翻译；构建期检查 1–9；短信登录 | **C1 已实现** |
 | P2 | 缓存档位与 CDN 头；标签；失效端点；插槽与卡片渲染器；`ObjectStateBatcher` | C1 已实现（除 `ObjectStateBatcher` → C3/C4 随第一个使用方） |
 | P3 | robots / sitemap / RSS 管线；410（proxy + 已删除集合 + 同步客户端）；死链文件；IndexNow 密钥文件；URL 形态回归检查与 legacy 308 | C1 已实现管线；内容的 sitemap / RSS 贡献随 client-content（C2），已删除台账的服务端随 site 模块 S1（C2） |
+| P4（C2） | 密封构建（§1b）；门户 / 控制台样式表分离（§10.5）；媒体图片、过期兜底与签名有效期的运行期交叉校验（§10.4）；底座端到端测试 | **C2 已实现** |
 | — | 多实例的共享缓存处理器（`cacheHandlers`）与共享的已删除集合 | 扩容时做；第一版单实例 |
 
 C1 验收（itwind-client 真实运行，Playwright 12/12）：首页 HTML 含完整主内容与元数据、首屏不靠客户端取数（只有一次 `/api/session`）；带与不带 Cookie 的 HTML 逐字节一致；未知频道与不合法参数 404、内部 `~q` 段 404、已删除地址 410（noindex）、恢复后 404；失效端点错签 / 无签 401、错标签 400、正确签名 200 且按 eventId 幂等；robots 与 sitemap 索引、分片可用；`/my/account/profile` 未登录 → `/login?next=…` → 短信验证码登录后回到原页；门户页上账密登录回到原页；`next=//evil.example` 被拒、落在控制台首页。底座自身：生成脚本与运行时单测 87 项。
+
+底座端到端测试（C2，`pnpm e2e`，24 项全绿）：夹具模块（`e2e/fixture-module`：无参数列表页 `/`、goneAware 对象页 + legacy 308 + 数据驱动 308、带查询白名单的列表页、dynamic 页、卡片渲染器、带 news 的 sitemap、站点与模块 feed）+ 进程内模拟后端（`e2e/mock-backend.mts`：签名校验的已删除台账、媒体策略与刷新、账密登录）+ 真实 `next build && next start`。覆盖：构建期 0 次后端请求；路由生成；SSR 正文、元数据、站点验证、JSON-LD；404 / 暂时下线 404 + noindex / 参数不合法不打后端；启动同步的台账首访即 410、页面层 gone 先 404 后 410、死链文件；数据驱动与 legacy 308；`~q` 顺序无关、剥 utm、canonical 带白名单、外部访问 `~q` 404；dynamic 恒 200 + noindex；失效端点的签名 / 时间戳 / 字段 / 限额 / 保留路径 / 重复 eventId，refresh 与 expire 对下一次响应的实际效果，gone / revived；缓存命中不打后端；robots、sitemap 索引 / 分片 / news、RSS、IndexNow；站点 404 与控制台守卫；公开页只有门户样式表；浏览器里的登录 `next` 跳回与开放重定向防护（`//evil`、`/\evil`、编码变体、外站、`/api/`）；过期图片的兜底刷新；带与不带 Cookie 的 HTML 逐字节一致；运行日志无错误。Next 16.4 已知行为：页面里的 `permanentRedirect` 输出两行相同的 `Location`（浏览器只在取值不同时报错），测试按每一行都等于目标校验。
 
 ## 16. 开放项（已关闭）
 
