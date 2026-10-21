@@ -4,7 +4,7 @@ import { goneStore, MemoryGoneStore, setGoneStore } from "../gone";
 import { syncGoneOnce } from "../gone-sync";
 import { verifySignature } from "../signature";
 
-test("the store lives on globalThis so proxy and route handlers share it", async () => {
+test("the store lives on the process object so proxy and route handlers share it", async () => {
   const store = goneStore();
   await store.add(["/article/1"]);
   const again = (await import(`../gone.ts?copy=${Date.now()}`)) as typeof import("../gone");
