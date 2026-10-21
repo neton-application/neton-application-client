@@ -15,7 +15,7 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import path from "node:path";
@@ -93,7 +93,8 @@ async function main() {
   try {
     await rm(fixtureModuleTarget, { recursive: true, force: true });
     await mkdir(path.dirname(fixtureModuleTarget), { recursive: true });
-    await cp(path.join(here, "fixture-module"), fixtureModuleTarget, { recursive: true });
+    // 与 pnpm 的 `file:` 依赖一样以符号链接装入：样式扫描、转译、解析都要经得起符号链接（产品的模块都是这样装的）
+    await symlink(path.join(here, "fixture-module"), fixtureModuleTarget, "dir");
 
     // ---- 构建：后端是绊线 ----
     console.log("[e2e] building the fixture site (backend unreachable by design)…");
@@ -446,6 +447,8 @@ async function suite(c: Ctx) {
     const css = await (await c.get(sheets[0]!)).text();
     assert.ok(css.length < 40_000, `portal CSS is ${css.length} bytes`);
     assert.ok(!css.includes("admin-filter-grid") && !css.includes("front-page-enter"), "console rules leaked into the portal stylesheet");
+    assert.ok(css.includes("--fixture-public-view"), "a module's public component outside public/cards/slots lost its utility classes");
+    assert.ok(!css.includes("--fixture-console-page"), "a module's console page leaked utility classes into the portal stylesheet");
     assert.doesNotMatch(text, /fonts\.googleapis|\.woff2?/, "no web fonts");
     const login = await c.html("/login");
     const loginSheets = [...login.text.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]!);

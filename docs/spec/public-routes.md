@@ -456,7 +456,9 @@ type PublicMedia = { fileId: string; url: string; mimeType?: string | null; widt
 
 ### 10.5 样式表
 
-门户与控制台各自一份样式表：公开页（PublicFrame）只加载 `src/site/public.css`——Tailwind 只扫描门户外壳与 fork 页面（`src/site`）、生成的公开路由、站点 404 与各模块的 `src/{public,cards,slots}`，加上共享的设计令牌 `src/styles/tokens.css`；控制台与登录注册页加载 `src/styles/console.css`（整个工作区与模块控制台页面）。门户专属样式（品牌色等）写在 fork 的 `src/site/portal.css`。字体一律系统字体栈，不加载网络字体。端到端测试断言公开页只有一个样式表且不含控制台规则（夹具门户 gzip 后约 4 KB）。
+门户与控制台各自一份样式表：公开页（PublicFrame）只加载 `src/site/public.css`——Tailwind 只扫描门户外壳与 fork 页面（`src/site`）、生成的公开路由、站点 404 与各模块 `src` 下**除控制台页面（`src/pages`）、测试与语言包以外**的全部代码（模块自己组织的视图、正文渲染、客户端岛同样出现在公开页里），加上共享的设计令牌 `src/styles/tokens.css`；控制台与登录注册页加载 `src/styles/console.css`（整个工作区与模块控制台页面）。模块目录由注册表生成脚本按模块包的**真实路径**写进 `src/generated/public-sources.css`：pnpm 的 `file:` 依赖在 `node_modules` 里是符号链接，Tailwind 的 `@source` glob 不跟随符号链接，写成 `node_modules/@neton/*/src` 会静默漏掉模块的工具类（itwind C2 实测：文章卡片「没样式」）。门户专属样式（品牌色等）写在 fork 的 `src/site/portal.css`。字体一律系统字体栈，不加载网络字体。端到端测试以符号链接装入夹具模块（与产品一致），断言公开页只有一个样式表、不含控制台规则、模块 `views/` 里组件的工具类在、模块控制台页面的工具类不在（夹具门户 gzip 后约 4 KB）。
+
+公开页的服务端翻译只 import `src/generated/locales.generated.ts`（模块语言包），控制台页面的加载器在 `modules.generated.ts`：两者合在一个文件时，控制台页面全部成为每个公开路由的客户端引用并进入首屏 JS（itwind C2 实测每个公开路由多出 57 KB）。端到端测试的夹具模块带一个控制台页面，断言它不出现在公开路由的客户端引用清单里。
 
 ### 10.6 首屏 JS 预算
 
