@@ -12,7 +12,14 @@ import "./public.css";
  * `(public)` 布局与站点级 404 共用。不读请求、不读会话——整页缓存的前提。
  */
 export async function PublicFrame({ children }: { children: React.ReactNode }) {
-  const [brand, preloaded] = await Promise.all([getSiteBrand(), serverI18n.catalogsFor(publicNamespaces, site.locale)]);
+  // 客户端岛的词条由服务端按站点语言一次性给出（不进客户端包）：运行时的错误码翻译、门户 `site` 整份，
+  // 模块命名空间只给公开岛可用的 `public.*` / `error.*`（public-routes §12）
+  const [brand, host, modules] = await Promise.all([
+    getSiteBrand(),
+    serverI18n.catalogsFor(["errors", "site"], site.locale),
+    serverI18n.catalogsFor(publicNamespaces, site.locale, { publicKeysOnly: true }),
+  ]);
+  const preloaded = { ...host, ...modules };
   return (
     <>
       {/* 长开标签页的图片兜底（infra-media §7.3）：先于任何图片执行，捕获阶段监听 error */}

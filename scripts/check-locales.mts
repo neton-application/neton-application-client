@@ -8,6 +8,10 @@
  * 3. 宿主自己的源码（apps/console/src，含 fork 的门户外壳与页面）同样不得硬编码中文；词条放进
  *    `console`（控制台、登录注册）或 `site`（门户）命名空间。
  * 4. 还没有声明 `locales` 的模块列为待迁移，只告警不失败 —— 迁移逐个模块推进，已迁移的不允许倒退。
+ * 5. 模块的公开页客户端岛（模块源码里 `"use client"` 的文件，控制台页面 `pages/` 除外）只能用公开 key
+ *    （`public.*`、`error.*`）：公开页的 HTML 只预载这部分词条（public-routes §12）。
+ *
+ * 测试文件（`*.test.*`、`__tests__/`、`__fixtures__/`）不检查：断言里写中文是在验证译文。
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -57,12 +61,25 @@ function hardcodedCjk(file: string): string[] {
   return source.split("\n").flatMap((line, i) => (!exempt.has(i) && /[一-鿿]/.test(line) ? [`${path.relative(shellDir, file)}:${i + 1}: ${line.trim().slice(0, 80)}`] : []));
 }
 
-function walk(dir: string): string[] {
+const TEST_DIRS = new Set(["__tests__", "__fixtures__", "__mocks__"]);
+
+function walk(dir: string, skipDirs: ReadonlySet<string> = TEST_DIRS): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).flatMap((name) => {
     const full = path.join(dir, name);
-    return statSync(full).isDirectory() ? walk(full) : /\.(tsx?|mts)$/.test(name) ? [full] : [];
+    if (statSync(full).isDirectory()) return skipDirs.has(name) ? [] : walk(full, skipDirs);
+    return /\.(tsx?|mts)$/.test(name) && !/\.test\.[cm]?[jt]sx?$/.test(name) ? [full] : [];
   });
+}
+
+const PUBLIC_KEY = /^(public|error)\./;
+
+/** 模块客户端岛里用到的 key：只看调用了 `useT("<模块 id>")` 的 `"use client"` 文件里的字面量 `t("…")`。 */
+function clientIslandKeys(file: string, namespace: string): string[] {
+  const source = readFileSync(file, "utf8");
+  if (!/^\s*["']use client["']/m.test(source.split("\n").slice(0, 5).join("\n"))) return [];
+  if (!new RegExp(`useT\\(\\s*["']${namespace}["']`).test(source)) return [];
+  return [...new Set([...source.matchAll(/\bt\(\s*["']([^"']+)["']/g)].map((m) => m[1]!))];
 }
 
 // ---- 静态词条：运行时 + 宿主（控制台 console、门户 site） ----
@@ -88,7 +105,8 @@ for (const pkg of packages) {
   const manifestPath = shellRequire.resolve(`${pkg}/manifest`);
   const manifest = (await load<{ default: FrontModuleManifest }>(manifestPath)).default;
   const srcDir = path.dirname(manifestPath);
-  const sources = ["pages", "public", "slots", "cards", "sitemaps", "feeds"].flatMap((d) => walk(path.join(srcDir, d)));
+  // 整个模块源码（语言包与测试除外）：公开页、插槽、卡片之外，被它们 import 的视图、正文渲染、客户端岛同样不能硬编码
+  const sources = walk(srcDir, new Set([...TEST_DIRS, "locales"])).filter((f) => f !== manifestPath);
   if (!manifest.locales?.length) {
     const count = sources.reduce((n, f) => n + hardcodedCjk(f).length, 0);
     warnings.push(`${manifest.id}: 尚未国际化（源码里 ${count} 行含中文）`);
@@ -101,6 +119,16 @@ for (const pkg of packages) {
   }
   checkNamespace(manifest.id, catalog);
   for (const f of sources) for (const hit of hardcodedCjk(f)) errors.push(`[${manifest.id}] 已声明语言包，但源码仍有硬编码文案 ${hit}`);
+  const consolePages = path.join(srcDir, "pages") + path.sep;
+  const reference = Object.values(catalog)[0] ?? {};
+  for (const f of sources) {
+    if (f.startsWith(consolePages)) continue;
+    for (const key of clientIslandKeys(f, manifest.id)) {
+      const where = path.relative(srcDir, f);
+      if (!PUBLIC_KEY.test(key)) errors.push(`[${manifest.id}] 公开页客户端岛用了非公开 key "${key}"（${where}）：改名为 public.* / error.*，公开页只预载这两类`);
+      else if (!(key in reference)) errors.push(`[${manifest.id}] 客户端岛用到的 key "${key}" 不在语言包里（${where}）`);
+    }
+  }
 }
 
 for (const w of warnings) console.warn(`[locales] 待迁移 ${w}`);

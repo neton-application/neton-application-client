@@ -12,10 +12,28 @@ export interface ServerTranslate {
   readonly namespace: string;
 }
 
+/**
+ * 模块词条里**公开页客户端岛可用**的 key 前缀（public-routes §12）：`public.*`（岛屿自己的文案）与 `error.*`
+ * （`useDescribeError` 翻译机器码）。公开页的 HTML 只预载这部分——控制台页面的词条不进门户的每一页。
+ * 服务端翻译（`ctx.t`）不受限制：它不进 HTML。`pnpm check:locales` 检查模块的客户端岛只用这两类 key。
+ */
+export const PUBLIC_KEY_PREFIXES = ["public.", "error."] as const;
+
+export function isPublicKey(key: string): boolean {
+  return PUBLIC_KEY_PREFIXES.some((p) => key.startsWith(p));
+}
+
+export function publicSubset(messages: Messages): Messages {
+  return Object.fromEntries(Object.entries(messages).filter(([key]) => isPublicKey(key)));
+}
+
 export interface ServerI18n {
   getServerT(namespace: string, locale: string): Promise<ServerTranslate>;
-  /** 一组命名空间在某语言（及默认语言回退）下的全部词条，供公开布局一次性交给客户端岛。 */
-  catalogsFor(namespaces: readonly string[], locale: string): Promise<StaticCatalogs>;
+  /**
+   * 一组命名空间在某语言（及默认语言回退）下的词条，供公开布局一次性交给客户端岛。
+   * `publicKeysOnly`：只取 [PUBLIC_KEY_PREFIXES] 开头的 key（模块命名空间用；宿主的 `site`、`errors` 整份给）。
+   */
+  catalogsFor(namespaces: readonly string[], locale: string, options?: { publicKeysOnly?: boolean }): Promise<StaticCatalogs>;
 }
 
 export function createServerI18n(options: { registry: LocaleRegistry; catalogs: StaticCatalogs; defaultLocale: string }): ServerI18n {
@@ -60,13 +78,13 @@ export function createServerI18n(options: { registry: LocaleRegistry; catalogs: 
       Object.defineProperty(t, "namespace", { value: namespace });
       return t;
     },
-    async catalogsFor(namespaces, locale) {
+    async catalogsFor(namespaces, locale, catalogOptions) {
       const out: StaticCatalogs = {};
       for (const ns of new Set(namespaces)) {
         const entries: Record<string, Messages> = {};
         for (const l of locale === options.defaultLocale ? [locale] : [locale, options.defaultLocale]) {
           const messages = await load(ns, l);
-          if (messages) entries[l] = messages;
+          if (messages) entries[l] = catalogOptions?.publicKeysOnly ? publicSubset(messages) : messages;
         }
         if (Object.keys(entries).length) out[ns] = entries;
       }
