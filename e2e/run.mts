@@ -112,6 +112,12 @@ async function main() {
       await run("pnpm", ["run", "budget"], fixtureEnv, root);
     });
 
+    await check("public routes reference no console pages (locale and page registries are separate files)", async () => {
+      const manifest = path.join(shell, DIST, "server/app/(public)/(modules)/item/[id]/page_client-reference-manifest.js");
+      const text = await readFile(manifest, "utf8");
+      assert.doesNotMatch(text, /application-client-e2e-fixture[^"]*\/pages\//, "a console page leaked into a public route's client references");
+    });
+
     // ---- 启动 ----
     backend = await startMockBackend({ port: backendPort, secret: SECRET });
     // 不以 IP 字面量绑定：Next 16 在 `-H 127.0.0.1` 时把 proxy 的 nextUrl 建成 localhost、路由层却按 127.0.0.1
