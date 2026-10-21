@@ -275,6 +275,9 @@ async function suite(c: Ctx) {
     assert.match(card("2"), /loading="eager"/);
     assert.doesNotMatch(card("2"), /fetchpriority/i);
     assert.match(card("3"), /loading="lazy"/);
+    // 列表直接挂在 h1 之下：卡片标题用列表给的 h2，不跳级；首页（缺省）是 h3
+    assert.match(text, /<article data-testid="card"[^>]*>(?:<img[^>]*>)?<h2>/);
+    assert.match((await c.html("/")).text, /<article data-testid="card"[^>]*>(?:<img[^>]*>)?<h3>/);
   });
 
   await check("status: unknown id 404, withdrawn 404 noindex, invalid param 404 without a backend call", async () => {

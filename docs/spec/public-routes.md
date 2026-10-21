@@ -188,7 +188,7 @@ interface PublicRouteContext {
   href(routeKey: string, params?: Record<string, string>): string | null;   // 按站点配置生成路径；路由未装配返回 null
   path: string;                     // 当前页面的规范路径：按路由形态与路径参数生成，不含查询串，实例的固定参数不在路径里（运行时 pathOf()）
 }
-// Page 的 ctx 另有 renderSlot(target, { objectRef, summary }) 与 renderCards(cards, { styles, eagerImages, priorityFirst })（§10）
+// Page 的 ctx 另有 renderSlot(target, { objectRef, summary }) 与 renderCards(cards, { styles, eagerImages, priorityFirst, headingLevel })（§10）
 ```
 
 `load` 是缓存单元：生成的路由文件里模块作用域的 `"use cache"` 函数以 `(规范化 params, 白名单 query)` 为键缓存它的结果（路由 key 与 locale 是该文件与部署的常量），按返回的 `tags` 打标签、按结果类型选档位（§8.1）。`"use cache"` 必须写在路由文件里而不是运行时包里：缓存函数只能闭包住可序列化的值，路由定义里有函数。`Page` 不得再自行取数（需要的数据都在 `load` 里取齐，避免一页里出现多个缓存时效不一的主内容）；插槽有各自的缓存单元（§10.2）。
@@ -429,7 +429,7 @@ src/app/(public)/(modules)/…         生成：模块公开路由与模块 feed
 
 ### 10.3 卡片渲染器
 
-列表、首页楼层、筛选器卡片流（`/app/channel/{code}` 返回的 `Card`）里的对象按 `ref.type` 选渲染器：模块用 `cardRenderers` 注册（content 注册 `content.item`，comment 注册 `comment.comment`），没有渲染器的类型退回底座的 `ObjectSummary` 通用卡片（标题 + 摘要 + `link.web`，同源链接转站内路径）。渲染器是服务端组件，入参 `CardRendererProps = { card, style, eager, priority, ctx }`：`style` 来自挂载的 `cardStyle`（缺省 `auto`）；`eager` = 首屏前 `eagerImages` 张（缺省 3），图片不懒加载；`priority` = 页面的 LCP 图，只在 `priorityFirst: true` 时给第一张（缺省 false）。页面经 `ctx.renderCards(cards, { styles, eagerImages, priorityFirst })` 调用：列表页、首页最新流把第一张设为 LCP 图；详情页的首图由页面自己给 `priority`，其下的卡片流不开 `priorityFirst`。
+列表、首页楼层、筛选器卡片流（`/app/channel/{code}` 返回的 `Card`）里的对象按 `ref.type` 选渲染器：模块用 `cardRenderers` 注册（content 注册 `content.item`，comment 注册 `comment.comment`），没有渲染器的类型退回底座的 `ObjectSummary` 通用卡片（标题 + 摘要 + `link.web`，同源链接转站内路径）。渲染器是服务端组件，入参 `CardRendererProps = { card, style, eager, priority, headingLevel, ctx }`：`style` 来自挂载的 `cardStyle`（缺省 `auto`）；`eager` = 首屏前 `eagerImages` 张（缺省 3），图片不懒加载；`priority` = 页面的 LCP 图，只在 `priorityFirst: true` 时给第一张（缺省 false）。页面经 `ctx.renderCards(cards, { styles, eagerImages, priorityFirst })` 调用：列表页、首页最新流把第一张设为 LCP 图；详情页的首图由页面自己给 `priority`，其下的卡片流不开 `priorityFirst`。`headingLevel`（缺省 3）是卡片标题的标题级别：列表直接挂在页面 `h1` 下（频道、栏目）给 2，挂在 `h2` 区块里（首页楼层）用缺省——标题层级不跳级（屏幕阅读器按层级导航，Lighthouse heading-order）。
 
 ### 10.4 媒体图片（C2）
 
