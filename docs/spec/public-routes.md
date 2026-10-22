@@ -104,7 +104,6 @@ export default defineSite({
   robots: { disallow: ["/search"], deadLinkFile: true },
   verification: { google: "", baidu: "", bing: "" },   // 输出为 <meta name="…-site-verification">
   feeds: { site: { title: "site.feed.title" } },       // 词条 key（命名空间 site）
-  media: { signedUrlValiditySeconds: 3600 },            // 开启 CDN 鉴权时填，见 §8.1 与 infra-media §7.3
   vitals: { endpoint: "/api/site/vitals", sampleRate: 0.1 },  // 真实用户 Web Vitals 上报（§10.7），不填 = 不上报
   // anonymousPaths: ["/pricing"],                      // 只用于控制台在根路径的产品（§2.1b）
 });
@@ -318,7 +317,7 @@ App Router 的页面只能产出 404（`notFound()`）与重定向，不能产�
 - **CDN 的 `Cache-Control` 由 Next 生成**：整页里**最短**的档位决定 `s-maxage = revalidate`、`stale-while-revalidate = expire − revalidate`（例：首页 `s-maxage=30, stale-while-revalidate=3570`）。不另写一张 CDN 头的表：两套时长迟早不一致。revalidate 刻意短——没有 CDN 主动刷新时，它就是 CDN 层的新鲜度上限；事件驱动的失效（§8.4）才是主路径。Route Handler（sitemap、RSS、robots）用 `cacheControlFor(档位)` 输出同一形式。
 - 不输出 `stale-if-error`：渲染失败时 Next 自己继续给旧缓存；CDN 侧按产品的 CDN 配置开启回源失败给旧内容。
 - Next 的预渲染规则：stale ≥ 30 秒、expire ≥ 5 分钟，否则被排除出预渲染、变成请求期的动态洞，整页缓存不成立——档位都满足这两条。
-- **与签名媒体地址的约束（产品决定 1）**：infra 的 CDN 地址策略开启鉴权时（infra-media §7.3），站点配置 `media.signedUrlValiditySeconds` 必须与后端一致；`object` / `list` / `static` 的 revalidate 必须 ≤ 有效期 / 2，`resolveSite()` 在构建与启动时校验，不满足直接失败。超过 revalidate 之后的 stale-while-revalidate 窗口里给出的旧页面，以及长时间打开的标签页，由客户端的图片兜底刷新（infra-media §7.3）。
+- **与签名媒体地址的约束（产品决定 1；C4 改为单一来源）**：签名有效期的唯一来源是后端的部署配置（infra-media §7.3 的 `GET /app/infra/media/policy`），站点配置不重复它（C3 的站点 3600 与开发后端 600 不一致告警就出在两处各配一个数）。`object` / `list` / `static` 的 revalidate 在运行期经 `cacheProfile()` 收紧到 ≤ 有效期 / 2；取到策略之前按最短的受支持有效期（120 秒，即 revalidate ≤ 60 秒）收紧；有效期为 null（稳定地址）不收紧；后端的有效期短于 60 秒时记错误 `site.media.policy.invalid`（档位 stale 下限 30 秒，页面缓存名存实亡）。超过 revalidate 之后的 stale-while-revalidate 窗口里给出的旧页面，以及长时间打开的标签页，由客户端的图片兜底刷新（infra-media §7.3）。
 - 控制台与 `/api/*` 恒为 `private, no-store`；页面渲染时不得读当前时间（版权年份等用 `"use cache"` 包成缓存单元）。
 
 ### 8.2 缓存安全
@@ -493,7 +492,7 @@ type PublicMedia = { fileId: string; url: string; mimeType?: string | null; widt
 | 加载器 | 可替换：fork 覆盖 `src/site/media-loader.ts`（与 `portal-shell.tsx` 同一规则），由 `public-runtime` 在加载时 `setMediaLoader()`。地址仍由后端生成，网页端不能自己拼签名 |
 | 过期兜底 | 公开外框在 `<body>` 开头输出一段不依赖 React 的内联脚本（`MEDIA_REFRESH_SCRIPT`）：捕获阶段监听 `error`，对带 `data-neton-media` 的图片调一次 `GET /api/backend/app/infra/media/url/{fileId}?variant=`，去掉 `srcset` 换上新地址；每张图只重试一次 |
 | 分享图 | `shareImageUrl(media)`：有 `og` 规格用它（1200×675），否则原图 |
-| 运行期交叉校验 | 服务启动时读 `GET /app/infra/media/policy`（`{ strategy, validitySeconds, bucketSeconds, imageParams }`），与站点配置 `media.signedUrlValiditySeconds` 不一致即记错误日志 `site.media.policy.mismatch`，并以较短者为准：会渲染媒体的档位（object / list / static）经 `cacheProfile()` 收紧到 `revalidate ≤ 有效期 / 2`；后端暂时连不上时按退避重试，在那之前按站点配置运行 |
+| 有效期 | 服务启动时读 `GET /app/infra/media/policy`（`{ strategy, validitySeconds, bucketSeconds, imageParams }`），记 `site.media.policy.applied`；会渲染媒体的档位（object / list / static）经 `cacheProfile()` 收紧到 `revalidate ≤ 有效期 / 2`。策略 `none`（没有 CDN）时后端如实报告中转地址短期签名的有效期（会员可见内容的图片），约束照样生效、不告警。后端暂时连不上时按退避重试，在那之前按 120 秒收紧 |
 
 私密媒体（会员可见、仅本人、临时文件）永不出现在公开 HTML 里：后端对匿名访问者不给出它们的地址，公开页在服务端也拿不到。
 
