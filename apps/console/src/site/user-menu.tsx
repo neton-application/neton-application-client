@@ -39,12 +39,13 @@ export function PublicUserMenu({ links = [] }: { links?: UserMenuLink[] }) {
   return (
     <div className="relative">
       <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("user.menu")} onClick={() => setOpen((v) => !v)}
-        className="flex h-9 items-center gap-2 rounded-full border border-[var(--border)] pl-1 pr-3 text-sm font-medium">
+        className="flex h-9 items-center gap-2 rounded-full border border-[var(--border)] p-1 text-sm font-medium sm:pr-3">
         {user.avatar
           // eslint-disable-next-line @next/next/no-img-element
           ? <img src={user.avatar} alt="" width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
           : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)]"><CircleUserRound size={16} aria-hidden /></span>}
-        <span className="max-w-[8rem] truncate">{user.nickname}</span>
+        {/* 窄屏只显示头像：昵称（新账号是打码的手机号）会把页头撑出视口，手机上整页被缩放、吸底条落到屏幕外 */}
+        <span className="hidden max-w-[8rem] truncate sm:inline">{user.nickname}</span>
       </button>
       {open && (
         <div role="menu" className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg">
