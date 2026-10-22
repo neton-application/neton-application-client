@@ -136,6 +136,7 @@ export const BASE_SLOT_TARGETS = [
   "public.object.aside",
   "public.object.bar",
   "console.header.actions",
+  "console.home",
 ] as const;
 
 export interface SlotContribution {

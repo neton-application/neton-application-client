@@ -6,11 +6,15 @@ import { consoleHref, loginHref } from "@neton/application-client-runtime/public
 import { usePublicSession } from "@neton/application-client-runtime/public-client";
 import { useT } from "@neton/application-client-runtime/i18n";
 
+/** 用户菜单里的一项：`label` 是 `site` 命名空间的词条 key，`path` 是控制台内路径（如 `/interaction/favorites`）。 */
+export interface UserMenuLink { label: string; path: string }
+
 /**
  * 页头的用户入口（客户端岛）。服务端与水合首帧都渲染「登录」按钮（匿名态，缓存安全）；
- * 拿到会话后换成头像与菜单。登录链接带上当前地址，登录后回到这一页。
+ * 拿到会话后换成头像与菜单：会员中心、外壳给的常用入口（[links]，如「我的收藏」「我的足迹」）、退出。
+ * 登录链接带上当前地址，登录后回到这一页。
  */
-export function PublicUserMenu() {
+export function PublicUserMenu({ links = [] }: { links?: UserMenuLink[] }) {
   const t = useT("site");
   const { state, consoleBasePath, refresh } = usePublicSession();
   const [here, setHere] = React.useState<string | null>(null);
@@ -45,6 +49,9 @@ export function PublicUserMenu() {
       {open && (
         <div role="menu" className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg">
           <a role="menuitem" href={consoleHref("/", consoleBasePath)} className="block px-3 py-2 text-sm hover:bg-[var(--muted)]">{t("user.console")}</a>
+          {links.map((link) => (
+            <a key={link.path} role="menuitem" href={consoleHref(link.path, consoleBasePath)} className="block px-3 py-2 text-sm hover:bg-[var(--muted)]">{t(link.label)}</a>
+          ))}
           <button role="menuitem" type="button" onClick={logout} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"><LogOut size={14} aria-hidden />{t("user.logout")}</button>
         </div>
       )}

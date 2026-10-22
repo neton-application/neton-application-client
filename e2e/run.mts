@@ -527,6 +527,8 @@ async function suite(c: Ctx) {
       // 控制台页头的 console.header.actions：同一个岛，按需加载，外面同样有会话水合
       await page.goto(`${c.BASE}/my`);
       await page.waitForSelector('header [data-testid="header-slot"][data-session="authenticated"]', { state: "attached", timeout: 15_000 });
+      // 控制台首页 console.home：模块的概览卡片按需加载进首页，替代底座的「已装配模块」空状态
+      await page.waitForSelector('[data-console-home] [data-testid="console-overview"]', { timeout: 15_000 });
       await context.close();
     });
 

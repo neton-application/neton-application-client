@@ -442,7 +442,7 @@ src/app/(public)/(site)/…            生成：fork 页面的路由文件（不
 src/app/(public)/(modules)/…         生成：模块公开路由与模块 feed（不入库）
 ```
 
-- `PortalShell` 的入参：`{ children, brand, locale, origin, consoleBasePath }`（`shell-types.ts`）。导航由外壳自己在服务端取（`"use cache"`，打 `site:nav` 标签）；用户菜单是客户端岛。外壳随每个公开页缓存，不读请求（构建期扫描覆盖它）；当前导航项在水合后由客户端标记 `aria-current`。
+- `PortalShell` 的入参：`{ children, brand, locale, origin, consoleBasePath }`（`shell-types.ts`）。导航由外壳自己在服务端取（`"use cache"`，打 `site:nav` 标签）；用户菜单是客户端岛（`<PublicUserMenu links>`：会员中心、外壳给的常用控制台入口——`links` 是 `{ label: site 命名空间词条, path: 控制台内路径 }`，如「我的收藏」「我的足迹」——与退出）。外壳随每个公开页缓存，不读请求（构建期扫描覆盖它）；当前导航项在水合后由客户端标记 `aria-current`。
 - fork 的公开页面用同一套运行时能力（`definePublicPage`，与 `definePublicRoute` 相同的 load / seo / Page 结构；命名空间 `site`），在站点配置 `pages` 里声明（key `site.<名称>`），遵守同样的禁止项与冲突检查。
 
 ### 10.2 插槽
@@ -459,10 +459,11 @@ src/app/(public)/(modules)/…         生成：模块公开路由与模块 feed
 | `public.object.aside` | 对象详情页 | `{ ref, summary }` | 同栏目最新、作者其他文章 |
 | `public.object.bar` | 对象详情页（C3） | `{ ref, summary }` | 手机吸底条（< 768 px，滚动时收起，与 App 详情页底部工具栏同形）：写评论 + 评论数（comment）、收藏（interaction）、分享（content）。桌面端不显示；详情页负责容器与显隐，贡献方只给按钮 |
 | `console.header.actions` | 底座（控制台） | — | 「回复我的」红点 |
+| `console.home` | 底座（控制台首页，C4） | — | 模块的概览卡片：未读回复（comment）、收藏与足迹（interaction）、投稿状态（content）。首页按 `slots.order["console.home"]` 排成两列网格，每张卡片按需加载、各自取数、各自出错；没有贡献时首页列出已装配的模块 |
 
 - `summary` 是对象详情里取到的对外信息（`capabilities`、计数、`link.web`），贡献方据 `capability` 过滤，**不能**拿它代替后端的授权检查。
 - 渲染方式：`server` 是服务端组件，自己负责缓存（`"use cache"` + 标签）；`client` 是客户端岛（`"use client"`，首屏按匿名态渲染）。「服务端出首屏（可收录）+ 客户端接管交互」就是一个 server 组件里渲染一个以服务端数据为初始值的 client 组件，不单列 `hybrid`。
-- **不针对对象的插槽**（`public.header.actions`、`console.header.actions`）入参只有 `SiteSlotProps = { locale }`。门户里由外壳调用 `renderSiteSlot("public.header.actions", { locale })`（`src/site/slots.tsx`；fork 的外壳必须调用它，否则模块的页头贡献不出现），随每个公开页缓存，客户端岛首帧按匿名态。控制台里由页头（`ConsoleHeaderActions`）渲染：`console.*` 贡献**只能是客户端岛**，注册表生成脚本把它们写进 `modules.generated.ts` 的 `consoleSlotRegistry`（按需 `import()`），不进门户的 `public.generated.tsx`；外面同样挂 `PublicSessionProvider`（多一次 `/api/session`），所以同一个组件（如「回复我的」红点）可以同时贡献给门户与控制台。底座端到端测试的夹具模块两处都挂了一个读会话的岛并断言。
+- **不针对对象的插槽**（`public.header.actions`、`console.header.actions`、`console.home`）入参只有 `SiteSlotProps = { locale }`。门户里由外壳调用 `renderSiteSlot("public.header.actions", { locale })`（`src/site/slots.tsx`；fork 的外壳必须调用它，否则模块的页头贡献不出现），随每个公开页缓存，客户端岛首帧按匿名态。控制台里由页头（`ConsoleHeaderActions`）渲染：`console.*` 贡献**只能是客户端岛**，注册表生成脚本把它们写进 `modules.generated.ts` 的 `consoleSlotRegistry`（按需 `import()`），不进门户的 `public.generated.tsx`；外面同样挂 `PublicSessionProvider`（多一次 `/api/session`），所以同一个组件（如「回复我的」红点）可以同时贡献给门户与控制台。底座端到端测试的夹具模块两处都挂了一个读会话的岛并断言。
 - 贡献方的入参（运行时导出类型）：`ClientSlotProps = { objectRef, summary, locale }`；`ServerSlotProps` 另有 `site` 与 `href(routeKey, params)`（与页面 `ctx.href` 相同，贡献方互链不写死 URL）。客户端岛拿不到 `href`：需要的链接由 server 贡献算好作为 props 传下去。
 - `summary` 里的对外计数 `commentCount`、`favoriteCount`、`viewCount`（可选）由拥有对象的模块在详情里给出，缓存时效内允许滞后；贡献方只用来显示，实时数在水合后自己取。
 - 一个插槽里多个贡献按站点配置 `slots.order[target]` 列出的顺序在前，其余按 `order`（缺省 100）再按 id；`slots.hide` 隐藏。server 贡献抛错时记日志、渲染为空；client 贡献包在错误边界里。都不让整页 500。
