@@ -1,0 +1,74 @@
+name: Client CI
+
+# 干净环境门禁（public-routes §10.6、§14、§15）：
+# - 工作区布局与本地开发一致（projects/Neton/*），兄弟仓库按 scripts/ci/dependencies.lock 精确到提交号检出。
+# - 依赖按 pnpm-lock.yaml 冻结安装；注册表 + 语言包检查 + 类型检查 + 单测。
+# - 端到端：夹具模块 + 进程内模拟后端 + 真实 next build / next start（构建期零后端请求、首屏 JS 预算、
+#   缓存与失效、410 与死链文件、CDN 规则、结构化数据、预热、登录跳回、Web Vitals），最后是 Lighthouse 门禁
+#   （移动端、devtools 实际节流、预热后 3 次有效测量的中位数，只认页面缓存给出的文档）。
+# - 供应链：生产依赖的高危漏洞审计。
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+env:
+  NETON_CI_TOKEN: ${{ secrets.NETON_CI_TOKEN }}
+  NEXT_TELEMETRY_DISABLED: "1"
+  NETON_SCHEMA_ORG_CACHE: ${{ github.workspace }}/.cache/neton
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: Neton/neton-application-client
+    steps:
+      - name: Checkout client
+        uses: actions/checkout@v4
+        with:
+          path: Neton/neton-application-client
+
+      - name: Checkout locked sibling repositories
+        working-directory: ${{ github.workspace }}
+        run: Neton/neton-application-client/scripts/ci/checkout-dependencies.sh "$GITHUB_WORKSPACE"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: Neton/neton-application-client/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (registry + locales + tsc)
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Cache the schema.org vocabulary (structured-data checks)
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/neton
+          key: schemaorg-30.1
+
+      - name: Install Chromium (Playwright e2e, Lighthouse)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: End-to-end (fixture modules, mock backend, budget, Lighthouse gate)
+        run: pnpm e2e
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high

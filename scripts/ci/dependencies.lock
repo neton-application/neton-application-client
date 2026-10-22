@@ -1,0 +1,2 @@
+# 由 scripts/ci/update-dependency-lock.sh 生成，勿手改。格式：<仓库> <路径> <提交号>
+neton-application/neton-application-front            Neton/neton-application-front                        ecadcb6f567a131df6a939e05c1c09963e4939ac

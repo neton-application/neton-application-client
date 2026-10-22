@@ -1,0 +1,4 @@
+# 干净环境构建底座所需的兄弟仓库。格式：<GitHub 仓库> <相对于工作区根目录的路径>
+# 路径与本地开发布局一致：packages/*/package.json 的 file: 依赖按这个布局写相对路径。
+# 由 update-dependency-lock.sh 生成 dependencies.lock（追加本地验证过的提交号）。
+neton-application/neton-application-front   Neton/neton-application-front
