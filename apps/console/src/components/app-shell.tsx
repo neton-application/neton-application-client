@@ -64,6 +64,7 @@ import { cn } from "@neton/application-client-kit";
 import { memberInitial } from "@neton/application-client-runtime/types";
 import { useT } from "@neton/application-client-runtime/i18n";
 import { BrandMark } from "./brand-mark";
+import { ConsoleHeaderActions } from "./console-header-actions";
 import { LocaleSwitcher } from "./locale-switcher";
 import { useSiteBrand } from "./site-brand";
 
@@ -689,6 +690,7 @@ export function AppShell({
           </div>
 
           <div className="ml-auto flex items-center gap-1.5">
+            <ConsoleHeaderActions />
             <button
               type="button"
               aria-label={t("search.open")}

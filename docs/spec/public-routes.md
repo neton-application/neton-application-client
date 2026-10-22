@@ -462,6 +462,7 @@ src/app/(public)/(modules)/…         生成：模块公开路由与模块 feed
 
 - `summary` 是对象详情里取到的对外信息（`capabilities`、计数、`link.web`），贡献方据 `capability` 过滤，**不能**拿它代替后端的授权检查。
 - 渲染方式：`server` 是服务端组件，自己负责缓存（`"use cache"` + 标签）；`client` 是客户端岛（`"use client"`，首屏按匿名态渲染）。「服务端出首屏（可收录）+ 客户端接管交互」就是一个 server 组件里渲染一个以服务端数据为初始值的 client 组件，不单列 `hybrid`。
+- **不针对对象的插槽**（`public.header.actions`、`console.header.actions`）入参只有 `SiteSlotProps = { locale }`。门户里由外壳调用 `renderSiteSlot("public.header.actions", { locale })`（`src/site/slots.tsx`；fork 的外壳必须调用它，否则模块的页头贡献不出现），随每个公开页缓存，客户端岛首帧按匿名态。控制台里由页头（`ConsoleHeaderActions`）渲染：`console.*` 贡献**只能是客户端岛**，注册表生成脚本把它们写进 `modules.generated.ts` 的 `consoleSlotRegistry`（按需 `import()`），不进门户的 `public.generated.tsx`；外面同样挂 `PublicSessionProvider`（多一次 `/api/session`），所以同一个组件（如「回复我的」红点）可以同时贡献给门户与控制台。底座端到端测试的夹具模块两处都挂了一个读会话的岛并断言。
 - 贡献方的入参（运行时导出类型）：`ClientSlotProps = { objectRef, summary, locale }`；`ServerSlotProps` 另有 `site` 与 `href(routeKey, params)`（与页面 `ctx.href` 相同，贡献方互链不写死 URL）。客户端岛拿不到 `href`：需要的链接由 server 贡献算好作为 props 传下去。
 - `summary` 里的对外计数 `commentCount`、`favoriteCount`、`viewCount`（可选）由拥有对象的模块在详情里给出，缓存时效内允许滞后；贡献方只用来显示，实时数在水合后自己取。
 - 一个插槽里多个贡献按站点配置 `slots.order[target]` 列出的顺序在前，其余按 `order`（缺省 100）再按 id；`slots.hide` 隐藏。server 贡献抛错时记日志、渲染为空；client 贡献包在错误边界里。都不让整页 500。
