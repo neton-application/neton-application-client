@@ -290,6 +290,7 @@ interface PublicSeo {
 App Router 的页面只能产出 404（`notFound()`）与重定向，不能产出 410。底座的做法：
 
 - `goneAware` 路由由底座的 `proxy.ts`（Next 16 的请求代理）先查**已删除 URL 集合**，命中即由 proxy 直接返回 410：一份生成期按站点语言写好的独立静态 HTML（`<meta name="robots" content="noindex">` + `X-Robots-Tag: noindex`，文案取宿主 `site` 命名空间的 `status.gone.*`，缓存一天），不进入页面渲染。不用「改写到内部 410 页面 + 状态码」：C1 实测 Next 16 不保证改写后的响应带上 proxy 给的状态码（同一 URL 时而 410 时而 200）。
+- **失效目标就绪（site-module §6.0，产品决定 2）**：Next 服务启动时（以及已删除集合的同步从失败恢复时）向后端发签名的 `POST /platform/site/target/ready`（payload = 原始请求体 `{}`；多实例可设 `NETON_SITE_REVALIDATE_TARGET` 只唤醒自己），后端把积压的失效投递立即重排、清零退避，下一个投递节拍就按顺序合并补投——重启不再等退避窗口（后端退避上限也降到 60 秒）。启动时按 1–60 秒退避重试直到成功；后端没装 site 模块或没配密钥时记一次日志后停止（运行时 `signalSiteReady`，底座端到端测试断言启动后收到一次签名正确的信号）。
 - 集合的来源是服务端 site 模块的已删除台账：失效端点收到 `gone` 条目时加入（§8.5）；Next 服务启动时、以及每 10 分钟，从后端 `GET /platform/site/gone?since=` 增量同步（签名鉴权，site-module §6）。
 - 多实例部署时集合放在共享缓存里（`setGoneStore()` 换实现，与 §8.6 的共享缓存同一处）；单实例放进程内，挂在 `process` 对象上：proxy 跑在自己的上下文里，能读到主上下文 `globalThis` 上已有的属性，自己写上去的属性主上下文却看不到（C1 实测：proxy 先访问时两边各建一份，集合分裂），`process` 是两边共享的同一个对象。
 - 站点配置 `robots.deadLinkFile = true` 时集合同时输出为 `/sitemaps/gone.txt`（§11.5）。

@@ -299,8 +299,9 @@ async function suite(c: Ctx) {
     assert.equal(c.backendHits("/app/fixture/item/abc"), before);
   });
 
-  await check("410: ledger entries synced at startup answer 410 on the first visit; signed ledger requests", async () => {
+  await check("startup: signed ready signal to the site module; ledger entries synced at startup answer 410 on the first visit", async () => {
     assert.ok(c.backend.goneRequests.length >= 1 && c.backend.goneRequests.every((r) => r.ok), "the gone ledger was requested with a valid signature");
+    assert.ok(c.backend.readySignals.length >= 1 && c.backend.readySignals.every((r) => r.ok && r.body === "{}"), "the portal announced itself ready to the site module at startup (signed)");
     const r = await c.html("/item/9");
     assert.equal(r.status, 410);
     assert.equal(r.headers.get("x-robots-tag"), "noindex");
