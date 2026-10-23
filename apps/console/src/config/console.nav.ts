@@ -8,7 +8,7 @@ import type { NavItem } from "@neton/application-client-runtime/menu";
  *
  * 每一项对应 console 装配的一个页面；侧栏名同时是该页的页签标题（见 workspace-root.tsx）。
  * icon 取 app-shell.tsx 里 iconMap 的键名，写错会静默回落到 CircleDot。
- * name 可写 `console` 命名空间里的词条 key（在 src/messages.ts 补 `menu.*`），按当前语言翻译；
+ * name 与 group 可写 `console` 命名空间里的词条 key（在 src/messages.ts 补 `menu.*`），按当前语言翻译；
  * 找不到对应词条时原样显示，所以直接写字面名称也能用。
  */
 export const consoleNav: NavItem[] = [];
