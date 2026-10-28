@@ -246,8 +246,12 @@ export const jsonLd = {
     /** 封面与正文图片（地址，或带宽高的 ImageObject）；Google 建议 16:9、4:3、1:1 各一张 */
     images?: (string | { url: string; width?: number; height?: number })[];
     description?: string;
-    author?: { name: string; url?: string };
-    publisher: { name: string; logo?: string };
+    /**
+     * 作者：缺省是个人（Person）；机构署名（转载来源、编辑部）用 `kind: "Organization"`。不给时以发布方（publisher）
+     * 作为作者——Google 的 Article 富媒体要求每篇都有带名字的 author，不能空着。
+     */
+    author?: { name: string; url?: string; kind?: "Person" | "Organization" };
+    publisher: { name: string; logo?: string; url?: string };
     section?: string;
     keywords?: string[];
     commentCount?: number;
@@ -263,10 +267,13 @@ export const jsonLd = {
       dateModified: input.dateModified,
       description: input.description ? truncateGraphemes(input.description, DESCRIPTION_MAX) : undefined,
       image: input.images?.map((img) => (typeof img === "string" ? img : compact({ "@type": "ImageObject", url: img.url, width: img.width, height: img.height }))),
-      author: input.author ? compact({ "@type": "Person", name: input.author.name, url: input.author.url }) : undefined,
+      author: input.author
+        ? compact({ "@type": input.author.kind ?? "Person", name: input.author.name, url: input.author.url })
+        : compact({ "@type": "Organization", name: input.publisher.name, url: input.publisher.url }),
       publisher: compact({
         "@type": "Organization",
         name: input.publisher.name,
+        url: input.publisher.url,
         logo: input.publisher.logo ? { "@type": "ImageObject", url: input.publisher.logo } : undefined,
       }),
       articleSection: input.section,

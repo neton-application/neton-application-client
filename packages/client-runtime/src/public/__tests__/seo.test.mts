@@ -90,7 +90,13 @@ test("article headlines are truncated by grapheme, never splitting a character",
   assert.ok(graphemes.slice(0, -1).every((g) => g.segment === "👍🏽"));
   const b = jsonLd.article({ headline: "t", url: "u", datePublished: "d", publisher: { name: "E" } }) as Record<string, unknown>;
   assert.equal("dateModified" in b, false, "dateModified is omitted, never faked with the row's updatedAt");
-  assert.equal("author" in b, false);
+  assert.deepEqual(b.author, { "@type": "Organization", name: "E" }, "no byline: the publisher is the author, never an empty author");
+  const c = jsonLd.article({
+    headline: "t", url: "u", datePublished: "d", publisher: { name: "E", url: "https://www.example.com" },
+    author: { name: "IT之家", url: "https://www.ithome.com/", kind: "Organization" },
+  }) as Record<string, unknown>;
+  assert.deepEqual(c.author, { "@type": "Organization", name: "IT之家", url: "https://www.ithome.com/" });
+  assert.deepEqual(c.publisher, { "@type": "Organization", name: "E", url: "https://www.example.com" });
 });
 
 test("itemList entries carry url, name and position (Google summary-page carousel, schema.org ListItem)", () => {

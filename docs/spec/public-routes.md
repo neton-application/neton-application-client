@@ -265,7 +265,7 @@ interface PublicSeo {
 - **description** 按字素（`Intl.Segmenter`）截到 160，换行与连续空白压成一个空格；`verification` 的 Bing 输出为 `msvalidate.01`、百度为 `baidu-site-verification`。
 - **RSS 发现**：`alternates.feeds` 输出 `<link rel="alternate" type="application/rss+xml">`；站点 feed 由底座在所有公开页输出。
 - 站点验证（`verification`）输出为对应的 meta 标签。
-- **本地结构化数据校验（C5）**：Rich Results Test 只认公网地址，上线前用同一套规则在本地与 CI 里卡住——`pnpm structured-data <url>…`（`scripts/structured-data/validate.mts`）：@adobe/structured-data-validator 按钉住版本的 schema.org 词表（30.1，首次下载后缓存在 `NETON_SCHEMA_ORG_CACHE`，缺省 `~/.cache/neton`）校验类型与属性，并执行 Google 富媒体结果的规则（BreadcrumbList、ListItem、Organization、Person 等由库内置；Article / NewsArticle / BlogPosting 由底座补的处理器 `news-article.mjs` 执行：headline、绝对地址的 image、带时区的 datePublished、有 name 的 author 必须有，dateModified 缺失或早于发布时间、author 没有 url 记警告）。有 ERROR 退出码 1。底座端到端测试校验夹具首页与对象页，产品 fork（itwind）的端到端测试校验首页、文章、频道、栏目。上线后的外部校验（Rich Results Test、Search Console 的增强功能报告）见产品的部署文档。
+- **本地结构化数据校验（C5）**：Rich Results Test 只认公网地址，上线前用同一套规则在本地与 CI 里卡住——`pnpm structured-data <url>…`（`scripts/structured-data/validate.mts`）：@adobe/structured-data-validator 按钉住版本的 schema.org 词表（30.1，首次下载后缓存在 `NETON_SCHEMA_ORG_CACHE`，缺省 `~/.cache/neton`）校验类型与属性，并执行 Google 富媒体结果的规则（BreadcrumbList、ListItem、Organization、Person 等由库内置；Article / NewsArticle / BlogPosting 由底座补的处理器 `news-article.mjs` 执行：headline、绝对地址的 image、带时区的 datePublished、有 name 的 author 必须有，dateModified 缺失或早于发布时间、author 没有 url 记警告）。有 ERROR 退出码 1。`jsonLd.article` 因此**总是**输出 author：调用方给的作者（缺省 Person，机构署名用 `kind: "Organization"`），不给时以发布方 Organization 署名，不输出空作者。底座端到端测试校验夹具首页与对象页，产品 fork（itwind）的端到端测试校验首页、文章、频道、栏目。上线后的外部校验（Rich Results Test、Search Console 的增强功能报告）见产品的部署文档。
 
 ## 7. 状态语义
 
