@@ -15,6 +15,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { deflateSync } from "node:zlib";
+import { DEVICE_ID_PATTERN } from "../packages/client-runtime/src/device-id.ts";
 
 export interface MockItem {
   id: string;
@@ -224,6 +225,9 @@ export async function startMockBackend(options: { port: number; secret: string }
 
     if (path === "/app/auth/login-username" && req.method === "POST") {
       const input = await body(req);
+      // Same device-id contract as the account module: the browser-generated UUID v4 must be forwarded.
+      const deviceId = (input.device as { deviceId?: unknown } | undefined)?.deviceId;
+      if (typeof deviceId !== "string" || !DEVICE_ID_PATTERN.test(deviceId)) return fail(res, 400, 10100, deviceId === undefined ? "DEVICE_ID_REQUIRED" : "INVALID_DEVICE_ID");
       if (input.username !== USER.username || input.password !== USER.password) return fail(res, 401, 10011, "INVALID_CREDENTIALS");
       return ok(res, { userId: USER.id, accessToken: USER.token, refreshToken: "r", tokenType: "Bearer", expiresIn: 3600, refreshExpiresIn: 7200, scope: [] });
     }

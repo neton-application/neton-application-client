@@ -4,6 +4,7 @@ import * as React from "react";
 import { ArrowRight, Check, Eye, EyeOff, KeyRound, Moon, Sparkles, Sun, UserPlus } from "lucide-react";
 import { Alert, Button, Input, Label } from "@neton/application-client-kit";
 import { apiErrorFromEnvelope } from "@neton/application-client-runtime/client";
+import { getOrCreateDeviceId } from "@neton/application-client-runtime/device-id";
 import { useDescribeError } from "@neton/application-client-runtime/errors";
 import { useCaptcha } from "@neton/application-client-runtime/captcha-widget";
 import { useT } from "@neton/application-client-runtime/i18n";
@@ -57,7 +58,7 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Neton-Csrf": "1", ...captcha.headers },
-        body: JSON.stringify({ username: username.trim(), password, nickname, inviteCode }),
+        body: JSON.stringify({ username: username.trim(), password, nickname, inviteCode, deviceId: getOrCreateDeviceId() }),
       });
       const body = await res.json();
       if (body.code === 0) {

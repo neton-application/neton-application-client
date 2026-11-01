@@ -1,4 +1,4 @@
-import { backendJson, csrfRejection, envelopeFailure, establishSession, forwardedClientHeaders } from "@neton/application-client-runtime/server";
+import { backendJson, csrfRejection, envelopeFailure, establishSession, forwardedClientHeaders, webDevice } from "@neton/application-client-runtime/server";
 import type { MemberLoginResponse } from "@neton/application-client-runtime/types";
 
 interface RegisterInput {
@@ -6,6 +6,8 @@ interface RegisterInput {
   password?: string;
   nickname?: string;
   inviteCode?: string;
+  /** The browser's persisted device id (device-id.ts). */
+  deviceId?: unknown;
 }
 
 export async function POST(req: Request) {
@@ -26,7 +28,7 @@ export async function POST(req: Request) {
     }, { status: 400 });
   }
   // 后端 v1 只接受 USERNAME_PASSWORD；手机验证码注册走 sms-login，不在本入口。
-  const payload: Record<string, string> = { mode: "USERNAME_PASSWORD", username, password };
+  const payload: Record<string, unknown> = { mode: "USERNAME_PASSWORD", username, password, device: webDevice(input?.deviceId) };
   const nickname = input?.nickname?.trim();
   if (nickname) payload.nickname = nickname;
   const inviteCode = input?.inviteCode?.trim();

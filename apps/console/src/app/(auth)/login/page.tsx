@@ -5,6 +5,7 @@ import { ArrowRight, Check, Eye, EyeOff, Fingerprint, KeyRound, MessageSquareTex
 import { Alert, Button, Input, Label } from "@neton/application-client-kit";
 import type { LoginMethod } from "@neton/application-client-contract";
 import { ApiError, apiErrorFromEnvelope, apiWrite } from "@neton/application-client-runtime/client";
+import { getOrCreateDeviceId } from "@neton/application-client-runtime/device-id";
 import { useDescribeError } from "@neton/application-client-runtime/errors";
 import { useCaptcha } from "@neton/application-client-runtime/captcha-widget";
 import { useT } from "@neton/application-client-runtime/i18n";
@@ -170,7 +171,7 @@ function PasswordLoginForm({ onError, clearError }: FormProps) {
     setPending(true);
     clearError();
     try {
-      await postAuth("/api/auth/login", { username, password }, captcha.headers);
+      await postAuth("/api/auth/login", { username, password, deviceId: getOrCreateDeviceId() }, captcha.headers);
       window.location.href = afterAuthTarget();
       return;
     } catch (e) {
@@ -248,7 +249,7 @@ function SmsLoginForm({ onError, clearError }: FormProps) {
     setPending(true);
     clearError();
     try {
-      await postAuth("/api/auth/sms-login", { mobile, smsCode: code.trim() }, loginCaptcha.headers);
+      await postAuth("/api/auth/sms-login", { mobile, smsCode: code.trim(), deviceId: getOrCreateDeviceId() }, loginCaptcha.headers);
       window.location.href = afterAuthTarget();
       return;
     } catch (e) {

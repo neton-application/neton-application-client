@@ -11,6 +11,7 @@
     "./client-context": "./src/client-context.tsx",
     "./menu": "./src/menu.ts",
     "./types": "./src/types.ts",
+    "./device-id": "./src/device-id.ts",
     "./i18n": "./src/i18n.tsx",
     "./messages": "./src/messages.ts",
     "./errors": "./src/errors.ts",

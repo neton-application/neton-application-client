@@ -412,7 +412,7 @@ CDN 的配置**由站点配置与公开路由生成**（`pnpm cdn:rules [--text]
 - 登录 / 注册 / 短信登录的 Route Handler 成功后按 `next` 跳回。`next` 必须是本站相对路径：以 `/` 开头、不以 `//` 或 `/\` 开头、不进 `/api/`，解码后再检查一次；不合格一律回 `consoleBasePath`。
 - 退出登录（`/api/auth/logout`）支持 `next`，门户上退出留在当前页。
 - **整页跳转（产品决定 6）**，不做登录弹层——简单、对密码管理器与人机验证最友好。
-- **短信验证码登录在底座**（产品决定 6）：登录页按站点配置 `auth.loginMethods` 显示「验证码登录 / 密码登录」页签，复用 account 模块已有的 App 接口——发码经 `/api/backend` 匿名代理调 `POST /app/auth/send-sms-code`（`scene = 1`，人机验证动作 `send_code`），登录走底座 `POST /api/auth/sms-login` → `/app/auth/sms-login`（号码首次出现时后端按注册策略开户）。网页登录统一带 `device.platform = "web"`。
+- **短信验证码登录在底座**（产品决定 6）：登录页按站点配置 `auth.loginMethods` 显示「验证码登录 / 密码登录」页签，复用 account 模块已有的 App 接口——发码经 `/api/backend` 匿名代理调 `POST /app/auth/send-sms-code`（`scene = 1`，人机验证动作 `send_code`），登录走底座 `POST /api/auth/sms-login` → `/app/auth/sms-login`（号码首次出现时后端按注册策略开户）。网页登录 / 注册统一带 `device = { platform: "web", deviceId }`：`deviceId` 是浏览器首次使用时用安全随机源生成并存进 localStorage 的 UUID v4（小写带连字符，runtime `device-id.ts`），每次登录 / 注册都带同一个；route handler 只转发，绝不按请求现编，缺失或不合规由后端拒绝（`DEVICE_ID_REQUIRED` / `INVALID_DEVICE_ID`）。
 
 ### 9.3 运行时调整
 

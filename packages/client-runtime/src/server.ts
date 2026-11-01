@@ -75,8 +75,15 @@ export const getMemberProfile = cache(async (token: string) =>
   backendJson<MemberProfile>("/app/member/user/get", token),
 );
 
-/** 网页端登录请求带的设备信息（后端按它绑定 token 的 device claim）。 */
-export const WEB_DEVICE = { platform: "web" } as const;
+/**
+ * Device info sent with web login / register (the backend binds the token's device claim to it).
+ * [deviceId] is the id the browser generated and persisted (see `device-id.ts`) and posted in the request
+ * body; it is forwarded as is and never invented here, so a missing or malformed id is rejected by the
+ * backend with `DEVICE_ID_REQUIRED` / `INVALID_DEVICE_ID`.
+ */
+export function webDevice(deviceId: unknown): { platform: "web"; deviceId?: string } {
+  return typeof deviceId === "string" ? { platform: "web", deviceId } : { platform: "web" };
+}
 
 /**
  * 登录 / 注册成功后建立会话：HttpOnly、SameSite=Lax、path=/ 的会话 Cookie，门户与控制台共用

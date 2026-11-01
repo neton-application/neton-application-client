@@ -1,4 +1,4 @@
-import { backendJson, csrfRejection, envelopeFailure, establishSession, forwardedClientHeaders, WEB_DEVICE } from "@neton/application-client-runtime/server";
+import { backendJson, csrfRejection, envelopeFailure, establishSession, forwardedClientHeaders, webDevice } from "@neton/application-client-runtime/server";
 import type { MemberLoginResponse } from "@neton/application-client-runtime/types";
 
 /**
@@ -9,11 +9,11 @@ export async function POST(req: Request) {
   // 防登录 CSRF：跨站页面不能替用户登进攻击者的账号
   const rejected = csrfRejection(req);
   if (rejected) return rejected;
-  const input = (await req.json().catch(() => null)) as { mobile?: unknown; smsCode?: unknown } | null;
+  const input = (await req.json().catch(() => null)) as { mobile?: unknown; smsCode?: unknown; deviceId?: unknown } | null;
   const res = await backendJson<MemberLoginResponse>("/app/auth/sms-login", undefined, {
     method: "POST",
     headers: forwardedClientHeaders(req.headers),
-    body: JSON.stringify({ mobile: input?.mobile, smsCode: input?.smsCode, device: WEB_DEVICE }),
+    body: JSON.stringify({ mobile: input?.mobile, smsCode: input?.smsCode, device: webDevice(input?.deviceId) }),
   });
   if (res.code !== 0 || !res.data) return envelopeFailure(res, 401);
   await establishSession(res.data);
