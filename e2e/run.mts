@@ -658,11 +658,37 @@ async function suite(c: Ctx) {
       await context.close();
     });
 
-    // ---- 浏览器：按身份的加载与持久保存（SSR 首帧 + 换号重读 + 切换即保存）----
+    // ---- 客户端最终态与持久化；不验证或宣称个人语言 SSR 首帧 ----
     const cookieFor = async (context: import("playwright").BrowserContext, token: string) => {
       await context.addCookies([{ name: "neton_client_session", value: token, url: c.BASE }]);
     };
-    await check("console language: a late site default does not overwrite an anonymous manual choice", async () => {
+    const languageCheck = (name: string, run: () => Promise<void>) => check(name, async () => {
+      const snapshot = new Map([...c.backend.prefs].map(([key, value]) => [key, { ...value }]));
+      const writes = c.backend.prefWrites.length;
+      try { await run(); } finally {
+        c.backend.prefs.clear();
+        for (const [key, value] of snapshot) c.backend.prefs.set(key, value);
+        c.backend.prefWrites.length = writes;
+      }
+    });
+
+    await languageCheck("console language: missing and expired sessions remain 401, not conflicts", async () => {
+      for (const token of [undefined, "expired-fixture-token"]) {
+        const response = await c.get("/api/backend/app/account/preferences/app.language", {
+          headers: { "X-Neton-Preference-Subject": "42", ...(token ? { cookie: `neton_client_session=${token}` } : {}) },
+        });
+        assert.equal(response.status, 401);
+        assert.equal((await response.json()).code, 10000);
+      }
+    });
+    await languageCheck("console language: an identity lookup outage is 503 without clearing the session", async () => {
+      const headers = { cookie: "neton_client_session=i18n-profile-unavailable", "X-Neton-Preference-Subject": "42" };
+      assert.equal((await c.get("/api/backend/app/account/preferences/app.language", { headers })).status, 503);
+      const session = await c.get("/api/session", { headers });
+      assert.equal(session.status, 503);
+      assert.equal(session.headers.get("set-cookie"), null);
+    });
+    await languageCheck("console language: a late site default does not overwrite an anonymous manual choice", async () => {
       const context = await browser.newContext({ locale: "zh-CN" });
       const page = await context.newPage();
       let release!: () => void;
@@ -683,7 +709,7 @@ async function suite(c: Ctx) {
       } finally { release(); await context.close(); }
     });
 
-    await check("console language: a signed-in member's persisted language is applied in the browser", async () => {
+    await languageCheck("console language: a signed-in member's persisted language is applied in the browser", async () => {
       const context = await browser.newContext();
       await cookieFor(context, USER_BOB.token);
       const page = await context.newPage();
@@ -693,7 +719,7 @@ async function suite(c: Ctx) {
       await context.close();
     });
 
-    await check("console language: switching the signed-in identity on the same path re-reads the new member's language", async () => {
+    await languageCheck("console language: switching the signed-in identity on the same path re-reads the new member's language", async () => {
       const context = await browser.newContext();
       await cookieFor(context, USER_BOB.token);
       const page = await context.newPage();
@@ -707,7 +733,7 @@ async function suite(c: Ctx) {
       await context.close();
     });
 
-    await check("console language: focus revalidates a changed cookie on the same mounted path", async () => {
+    await languageCheck("console language: focus revalidates a changed cookie on the same mounted path", async () => {
       const context = await browser.newContext();
       await cookieFor(context, USER_BOB.token);
       const page = await context.newPage();
@@ -721,7 +747,7 @@ async function suite(c: Ctx) {
       await context.close();
     });
 
-    await check("console language: proxy rejects a stale subject before forwarding a preference write", async () => {
+    await languageCheck("console language: proxy rejects a stale subject before forwarding a preference write", async () => {
       const context = await browser.newContext();
       await cookieFor(context, USER_BOB.token);
       const response = await context.request.put(`${c.BASE}/api/backend/app/account/preferences/app.language`, {
@@ -733,7 +759,7 @@ async function suite(c: Ctx) {
       await context.close();
     });
 
-    await check("console language: switching while signed in persists to the account preference (switch = save)", async () => {
+    await languageCheck("console language: switching while signed in persists to the account preference (switch = save)", async () => {
       const context = await browser.newContext();
       await cookieFor(context, USER.token);
       const page = await context.newPage();
@@ -748,7 +774,36 @@ async function suite(c: Ctx) {
       await context.close();
     });
 
-    await check("console language: a failed save rolls back and shows a warning", async () => {
+    await languageCheck("console language: focus revalidation cannot undo a pending save", async () => {
+      const context = await browser.newContext();
+      await cookieFor(context, USER.token);
+      const page = await context.newPage();
+      let release!: () => void;
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => { release = resolve; });
+      const pending = new Promise<void>((resolve) => { started = resolve; });
+      await page.route("**/api/backend/app/account/preferences/app.language", async (route) => {
+        if (route.request().method() === "PUT") { started(); await ready; }
+        await route.continue();
+      });
+      try {
+        await page.goto(`${c.BASE}/my`, { waitUntil: "domcontentloaded" });
+        await page.waitForFunction(() => document.documentElement.lang === "zh-CN");
+        await page.getByRole("button", { name: "账户菜单" }).click();
+        await page.getByRole("menuitem", { name: "语言" }).click();
+        await page.getByRole("menuitemradio", { name: "English" }).click();
+        await pending;
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await page.evaluate(() => document.documentElement.lang), "en-US");
+        release();
+        await page.waitForResponse((r) => r.request().method() === "PUT" && r.url().includes("app.language"));
+        await page.waitForFunction(() => document.documentElement.lang === "en-US");
+        assert.equal(c.backend.prefs.get(USER.token)?.value, "en-US");
+      } finally { release(); await context.close(); }
+    });
+
+    await languageCheck("console language: a failed save rolls back and shows a warning", async () => {
       const context = await browser.newContext();
       await cookieFor(context, USER_BOB.token);
       const page = await context.newPage();

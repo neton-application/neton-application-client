@@ -1,9 +1,11 @@
 "use client";
 import { apiFetch } from "@neton/application-client-runtime/client";
 import { createLocalePreferences, createPreferenceLifecycle } from "./locale-preference-store";
+import { loginHref } from "@neton/application-client-runtime/public";
+import { site } from "@/generated/site.generated";
 
 const preferences = createLocalePreferences(apiFetch, async () => {
-  const res = await fetch("/api/session", { cache: "no-store" });
+  const res = await fetch("/api/session", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error("SESSION_UNAVAILABLE");
   const body = await res.json();
   return body?.data?.authenticated === true ? String(body.data.user.userId) : false;
@@ -33,6 +35,9 @@ function subjectChanged(error: unknown): never {
   // A cookie changed outside this mounted protected layout. Drop the whole previous user's
   // workspace, not only its language; an RSC refresh can retain the old client-side store.
   if (error instanceof DOMException && error.message === "SUBJECT_CHANGED") window.location.reload();
+  if (error instanceof Error && error.name === "SessionExpiredError") {
+    window.location.assign(loginHref(window.location.pathname + window.location.search, site.consoleBasePath));
+  }
   throw error;
 }
 

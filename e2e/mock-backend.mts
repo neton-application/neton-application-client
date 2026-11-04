@@ -255,6 +255,7 @@ export async function startMockBackend(options: { port: number; secret: string }
       return ok(res, { userId: u.id, accessToken: u.token, refreshToken: "r", tokenType: "Bearer", expiresIn: 3600, refreshExpiresIn: 7200, scope: [] });
     }
     if (path === "/app/member/user/get") {
+      if (bearer(req) === "i18n-profile-unavailable") return fail(res, 503, 3, "BACKEND_UNAVAILABLE");
       const u = USERS_BY_TOKEN.get(bearer(req));
       if (!u) return fail(res, 401, 10000, "AUTH_REQUIRED");
       return ok(res, { id: u.id, username: u.username, nickname: u.username === "bob" ? "Bob" : "Alice", avatar: null });

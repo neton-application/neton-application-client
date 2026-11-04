@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { I18nProvider, type I18nConfig } from "@neton/application-client-runtime/i18n";
 import { runtimeCatalogs } from "@neton/application-client-runtime/messages";
 import { localeRegistry } from "@/generated/modules.generated";
 import { site } from "@/generated/site.generated";
 import { consoleCatalogs } from "@/messages";
-import { isSuperseded, loadUserLocale, setActiveSubject } from "@/lib/locale-preference";
+import { loadUserLocale, setActiveSubject } from "@/lib/locale-preference";
 
 /** 控制台与登录注册页可选的语言 = 站点配置的 locales（与门户同一份来源）；时区跟随浏览器。 */
 const config: I18nConfig = { locales: site.supportedLocales, defaultLocale: site.locale };
@@ -45,32 +44,30 @@ export function Providers({
   subjectKey?: string;
 }) {
   const [siteLocale, setSiteLocale] = React.useState<string | undefined>(undefined);
-  const pathname = usePathname();
-  const router = useRouter();
   const [refresh, refreshIdentity] = React.useReducer((n) => n + 1, 0);
   // undefined is anonymous; null is an authenticated subject without a preference.
-  const [userLocale, setUserLocale] = React.useState<string | null | undefined>(subjectKey ? null : undefined);
+  const [preference, setPreference] = React.useState<{ subject?: string; value: string | null | undefined }>({ subject: subjectKey, value: subjectKey ? null : undefined });
+  const userLocale = preference.subject === subjectKey ? preference.value : subjectKey ? null : undefined;
   React.useEffect(() => {
     loadSiteLocale().then(setSiteLocale);
   }, []);
   React.useEffect(() => {
     // Cookies are HttpOnly: revalidate on return from another tab even if the path did not change.
-    const changed = () => { router.refresh(); refreshIdentity(); };
+    const changed = () => { if (document.visibilityState === "visible") refreshIdentity(); };
     window.addEventListener("focus", changed);
     return () => window.removeEventListener("focus", changed);
-  }, [router]);
+  }, []);
   React.useEffect(() => {
     // Identity change (login / logout / same-path account switch) re-reads and drops the previous
     // subject's in-flight load/save.
     setActiveSubject(subjectKey);
-    setUserLocale(subjectKey ? null : undefined);
     let active = true;
     loadUserLocale().then((value) => {
       if (!active) return;
-      setUserLocale(value);
-    }).catch((error) => { if (active && !isSuperseded(error)) setUserLocale(null); });
+      setPreference({ subject: subjectKey, value });
+    }).catch(() => { /* retain the last known preference on transient failure; auth errors redirect */ });
     return () => { active = false; };
-  }, [subjectKey, pathname, refresh]);
+  }, [subjectKey, refresh]);
   return (
     <I18nProvider key={subjectKey ?? "anonymous"} config={config} registry={localeRegistry} catalogs={catalogs} siteLocale={siteLocale} userLocale={userLocale}>
       {children}

@@ -14,7 +14,7 @@
  */
 
 import * as React from "react";
-import { resolveInitialLocale } from "./locale-resolution";
+import { matchLocale, resolveInitialLocale } from "./locale-resolution";
 import { formatMessage } from "./format-message";
 import { setFormatLocale } from "./types";
 
@@ -85,8 +85,8 @@ export function I18nProvider({
 }) {
   // An optional known preference can seed the provider; asynchronous preferences resolve on mount.
   const [locale, setLocaleState] = React.useState(() => {
-    if (userLocale && config.locales.includes(userLocale)) return userLocale;
-    return siteLocale && config.locales.includes(siteLocale) ? siteLocale : config.defaultLocale;
+    if (serverLocale) return config.defaultLocale;
+    return matchLocale(userLocale ?? undefined, config.locales) ?? matchLocale(siteLocale, config.locales) ?? config.defaultLocale;
   });
   const manual = React.useRef<string | undefined>(undefined);
   const previousUser = React.useRef(userLocale);

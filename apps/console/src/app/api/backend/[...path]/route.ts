@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { backendUrl, csrfRejection, forwardedClientHeaders, getMemberProfile, SESSION_COOKIE } from "@neton/application-client-runtime/server";
+import { preferenceSubjectRejection } from "@/lib/preference-subject";
 
 /**
  * 浏览器 → 后端的代理：有会话 Cookie 时换成 Authorization 头；**没有时不带身份照样转发**，
@@ -20,13 +21,9 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
   // Bind preference writes to the subject that started the interaction, using the SAME captured
   // cookie token for validation and forwarding. A cross-tab login cannot retarget an old write.
   const expected = req.headers.get("X-Neton-Preference-Subject");
-  if (expected && path.join("/") === "app/account/preferences/app.language") {
-    const profile = token ? await getMemberProfile(token) : null;
-    if (profile?.code !== 0 || String(profile.data?.id) !== expected) {
-      return Response.json({ code: 409, message: "PREFERENCE_SUBJECT_CHANGED" }, {
-        status: 409, headers: { "Cache-Control": "private, no-store" },
-      });
-    }
+  if (expected && token && path.join("/") === "app/account/preferences/app.language") {
+    const rejection = preferenceSubjectRejection(expected, await getMemberProfile(token));
+    if (rejection) return rejection;
   }
 
   const url = new URL(req.url);

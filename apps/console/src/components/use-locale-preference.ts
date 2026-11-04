@@ -26,6 +26,7 @@ export function useLocalePreference(): LocalePreferenceAction {
   const [failed, setFailed] = React.useState(false);
   const switchLocale = React.useCallback((next: string) => {
     const previous = locale;
+    setFailed(false);
     if (next === previous) return;
     setLocale(next); // 内部已写 localStorage：下次首帧直接命中
     setSaving(true);

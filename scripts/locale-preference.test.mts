@@ -2,6 +2,30 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createLocalePreferences, createPreferenceLifecycle, LANGUAGE_PATH } from "../apps/console/src/lib/locale-preference-store.ts";
 
+test("a revalidation begun during a save waits for that save and does not cancel it", async () => {
+  const lifecycle = createPreferenceLifecycle();
+  lifecycle.bind("alice");
+  let finish!: () => void;
+  let stored = "en-US";
+  let reads = 0;
+  const write = lifecycle.run(async () => {
+    await new Promise<void>((resolve) => { finish = resolve; });
+    stored = "zh-CN";
+  }, true);
+  const read = lifecycle.run(async () => { reads++; return stored; });
+  await Promise.resolve();
+  assert.equal(reads, 0);
+  finish();
+  await write;
+  assert.equal(await read, "zh-CN");
+});
+test("anonymous selection stays local but an expired authenticated session is not supersession", async () => {
+  const preferences = createLocalePreferences(async () => { throw new Error("must not request"); }, async () => false);
+  assert.equal(await preferences.load(), undefined);
+  await preferences.save("en-US");
+  await assert.rejects(preferences.save("en-US", { subjectKey: "alice" }), { name: "SessionExpiredError" });
+});
+
 test("canonical preference wins with a single read", async () => {
   const paths: string[] = [];
   const store = createLocalePreferences(async (path) => {

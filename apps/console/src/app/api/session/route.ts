@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { getMemberProfile, SESSION_COOKIE } from "@neton/application-client-runtime/server";
 import { memberDisplayName } from "@neton/application-client-runtime/types";
+import { isSessionFailure } from "@/lib/preference-subject";
 
 const PRIVATE = { "Cache-Control": "private, no-store" };
 
@@ -15,7 +16,8 @@ export async function GET() {
   const res = await getMemberProfile(token);
   if (res.code !== 0 || !res.data) {
     // 只有确定是会话失效才清 Cookie；后端暂时不可用时保留，下次再试
-    if (res.code >= 10000 && res.code < 10100) store.delete(SESSION_COOKIE);
+    if (!isSessionFailure(res.code)) return Response.json({ code: 3, message: "SESSION_UNAVAILABLE" }, { status: 503, headers: PRIVATE });
+    store.delete(SESSION_COOKIE);
     return Response.json({ code: 0, data: { authenticated: false } }, { headers: PRIVATE });
   }
   const member = res.data;
