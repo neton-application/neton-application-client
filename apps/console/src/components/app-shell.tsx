@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import {
   WorkspaceHost,
   WorkspaceLink,
@@ -358,7 +359,7 @@ function NavUser({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {localeSaveFailed && <p role="status" className="px-2 py-1 text-xs text-[var(--destructive)]">{t("locale.saveFailed")}</p>}
+        {localeSaveFailed && createPortal(<p role="status" className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-[var(--destructive)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--destructive)] shadow-lg">{t("locale.saveFailed")}</p>, document.body)}
       </SidebarMenuItem>
     </SidebarMenu>
   );
