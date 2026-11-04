@@ -32,7 +32,7 @@ export default async function ConsoleLayout() {
 
   const member = res.data;
   return (
-    <Providers>
+    <Providers subjectKey={String(member.id)}>
       <SiteBrandProvider brand={brand}>
         <WorkspaceRoot
           basePath={site.consoleBasePath}

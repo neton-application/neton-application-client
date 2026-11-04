@@ -7,7 +7,7 @@
 
 | 维度 | neton-application-front（B 端） | neton-application-client（C 端） |
 |------|------|------|
-| 账号体系 | module-system 管理员，`/admin` 组 | module-member 会员，`/app` 组（HttpOnly Cookie） |
+| 账号体系 | module-system 管理员，`/admin` 组 | module-account 账号，`/app` 组（HttpOnly Cookie） |
 | 导航 | 后端菜单驱动（RBAC） | 静态导航 `apps/console/src/config/console.nav.ts` |
 | 路由 | 全部受保护 | 受保护控制台 + `(public)` 公开路由组（产品 fork 自行添加） |
 
@@ -54,3 +54,11 @@ pnpm cdn:rules [--text]       # 由站点配置与公开路由生成 CDN 缓存�
 `NETON_PUBLIC_ROUTES_FILE` 选用、构建到 `.next-e2e`，夹具模块只在运行期间复制进 shell，结束后按产品自己的配置
 重新生成注册表；端口随机，模拟后端在测试进程内。`E2E_SERVE=1 pnpm e2e` 只构建并启动（排查用）。
 产品 fork 合并底座后可以照样跑它，验证底座在自己的依赖版本下仍然成立。
+
+## 账户语言偏好
+
+遵循 [Neton Application i18n 规范](https://netonframework.github.io/zh-hans/spec/application/i18n)。控制台菜单和登录页共用语言保存流程：登录后保存到 `app.language`（JSON 字符串与 version），匿名选择仅保存在浏览器。保存失败提示并回滚；跨标签换号后重新读取偏好并清空旧主体工作区，在途读取不能覆盖新选择，旧写入不能改到新账号。
+
+匿名语言优先级为手选 > 浏览器语言 > 站点默认。登录后以本人偏好为准，未设置时不继承上一账号缓存。语言不固化进 token，不新增个人语言 SSR 查询，公开页面既有 `serverLocale` 模式与缓存隔离不变；API 错误无需后端多语言化。
+
+`E2E_SKIP_LIGHTHOUSE=1 pnpm e2e` 只验功能链路并明确跳过性能审计；默认 `pnpm e2e` 仍包含 Lighthouse。浏览器后端是测试替身，不等于真实后端整服验收。

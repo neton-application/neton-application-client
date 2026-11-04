@@ -85,6 +85,7 @@ import {
 } from "@neton/application-client-kit";
 import { memberInitial } from "@neton/application-client-runtime/types";
 import { useLocale, useT } from "@neton/application-client-runtime/i18n";
+import { useLocalePreference } from "./use-locale-preference";
 import { BrandMark } from "./brand-mark";
 import { ConsoleHeaderActions } from "./console-header-actions";
 import { useSiteBrand } from "./site-brand";
@@ -285,7 +286,8 @@ function NavUser({
 }) {
   const t = useT("console");
   const store = useWorkspaceStore();
-  const { locale, locales, setLocale } = useLocale();
+  const { locale, locales } = useLocale();
+  const { switchLocale, saving: localeSaving, failed: localeSaveFailed } = useLocalePreference();
   const { isMobile } = useSidebar();
   const closeMobile = useCloseMobile();
   const name = user.nickname || user.username;
@@ -343,8 +345,8 @@ function NavUser({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger><Languages />{t("locale.label")}</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
-                    <DropdownMenuRadioGroup value={locale} onValueChange={setLocale}>
-                      {locales.map((l) => <DropdownMenuRadioItem key={l} value={l}>{LANGUAGE_NAMES[l] ?? l}</DropdownMenuRadioItem>)}
+                    <DropdownMenuRadioGroup value={locale} onValueChange={switchLocale}>
+                      {locales.map((l) => <DropdownMenuRadioItem key={l} value={l} disabled={localeSaving}>{LANGUAGE_NAMES[l] ?? l}</DropdownMenuRadioItem>)}
                     </DropdownMenuRadioGroup>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -356,6 +358,7 @@ function NavUser({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {localeSaveFailed && <p role="status" className="px-2 py-1 text-xs text-[var(--destructive)]">{t("locale.saveFailed")}</p>}
       </SidebarMenuItem>
     </SidebarMenu>
   );

@@ -5,7 +5,7 @@ import { SITE_CONFIG_TAG } from "@neton/application-client-runtime/public";
 import { publicBackendUrl } from "@neton/application-client-runtime/public-server";
 import { site } from "@/generated/site.generated";
 
-export type SiteBrand = { name: string; tagline: string; captcha: CaptchaConfig };
+export type SiteBrand = { name: string; tagline: string; captcha: CaptchaConfig; locale?: string };
 
 /** 后端不可达（构建期、后端重启中）时的兜底：站点配置里的品牌（缺省 Neton），不开人机验证。 */
 export const FALLBACK_SITE_BRAND: SiteBrand = { name: site.brand.name, tagline: site.brand.tagline, captcha: NO_CAPTCHA };
@@ -26,9 +26,9 @@ export async function getSiteBrand(): Promise<SiteBrand> {
   if (process.env.NEXT_PHASE === "phase-production-build") return FALLBACK_SITE_BRAND;
   try {
     const res = await fetch(`${publicBackendUrl()}/admin/system/site/public`, { signal: AbortSignal.timeout(3000) });
-    const body = (await res.json()) as { code?: number; data?: { name?: string; tagline?: string; captcha?: unknown } };
+    const body = (await res.json()) as { code?: number; data?: { name?: string; tagline?: string; captcha?: unknown; locale?: string } };
     if (body.code !== 0 || !body.data?.name) return FALLBACK_SITE_BRAND;
-    return { name: body.data.name, tagline: body.data.tagline ?? "", captcha: parseCaptchaConfig(body.data.captcha) };
+    return { name: body.data.name, tagline: body.data.tagline ?? "", captcha: parseCaptchaConfig(body.data.captcha), locale: body.data.locale };
   } catch {
     return FALLBACK_SITE_BRAND;
   }

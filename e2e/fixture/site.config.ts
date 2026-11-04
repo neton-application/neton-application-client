@@ -7,7 +7,7 @@ import { defineSite } from "@neton/application-client-contract";
 export default defineSite({
   origin: "https://www.fixture.example",
   consoleBasePath: "/my",
-  locales: { default: "zh-CN", supported: ["zh-CN"], prefix: "none" },
+  locales: { default: "zh-CN", supported: ["zh-CN", "en-US"], prefix: "none" },
   timeZone: "Asia/Shanghai",
   brand: { name: "Fixture" },
   auth: { loginMethods: ["password"] },

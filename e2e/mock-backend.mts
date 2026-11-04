@@ -30,7 +30,19 @@ export interface MockItem {
   withCover?: boolean;
 }
 
-export const USER = { username: "alice", password: "correct-horse", token: "tok-alice", id: 42 };
+export interface MockUser {
+  username: string;
+  password: string;
+  token: string;
+  id: number;
+}
+
+export const USER: MockUser = { username: "alice", password: "correct-horse", token: "tok-alice", id: 42 };
+/** Second subject for same-path account-switch assertions; seeded with an `en-US` preference. */
+export const USER_BOB: MockUser = { username: "bob", password: "horse-correct", token: "tok-bob", id: 43 };
+
+const USERS_BY_USERNAME = new Map<string, MockUser>([[USER.username, USER], [USER_BOB.username, USER_BOB]]);
+const USERS_BY_TOKEN = new Map<string, MockUser>([[USER.token, USER], [USER_BOB.token, USER_BOB]]);
 
 /** 一张纯色 PNG（宽高按需），供图片请求返回真实字节。 */
 function png(width: number, height: number): Buffer {
@@ -92,6 +104,10 @@ export interface MockBackend {
   refreshed: string[];
   /** `POST /app/fixture/state`（访问者状态，§9.4）每次调用带的 id 列表 */
   stateCalls: string[][];
+  /** 每个主体的 `app.language` 偏好（Bearer token → 值与乐观并发版本） */
+  prefs: Map<string, { value: string | null; version: number }>;
+  /** 记录每一次成功的 `app.language` 写入（token → 新值），供换号在途丢弃断言 */
+  prefWrites: { token: string; value: string | null; version: number }[];
   /** 收到的「失效目标就绪」信号（site-module §6.0）的签名校验结果与请求体 */
   readySignals: { ok: boolean; body: string }[];
   close(): Promise<void>;
@@ -113,6 +129,8 @@ export async function startMockBackend(options: { port: number; secret: string }
   const refreshed: string[] = [];
   const stateCalls: string[][] = [];
   const readySignals: MockBackend["readySignals"] = [];
+  const prefs = new Map<string, { value: string | null; version: number }>([[USER_BOB.token, { value: "en-US", version: 1 }]]);
+  const prefWrites: MockBackend["prefWrites"] = [];
   const base = `http://127.0.0.1:${options.port}`;
   const images = new Map<string, Buffer>();
 
@@ -139,6 +157,11 @@ export async function startMockBackend(options: { port: number; secret: string }
     for await (const c of req) chunks.push(c as Buffer);
     try { return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>; } catch { return {}; }
   }
+
+  const bearer = (req: IncomingMessage) => {
+    const h = req.headers.authorization ?? "";
+    return h.startsWith("Bearer ") ? h.slice(7) : "";
+  };
 
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", base);
@@ -225,15 +248,32 @@ export async function startMockBackend(options: { port: number; secret: string }
 
     if (path === "/app/auth/login-username" && req.method === "POST") {
       const input = await body(req);
-      // Same device-id contract as the account module: the browser-generated UUID v4 must be forwarded.
       const deviceId = (input.device as { deviceId?: unknown } | undefined)?.deviceId;
       if (typeof deviceId !== "string" || !DEVICE_ID_PATTERN.test(deviceId)) return fail(res, 400, 10100, deviceId === undefined ? "DEVICE_ID_REQUIRED" : "INVALID_DEVICE_ID");
-      if (input.username !== USER.username || input.password !== USER.password) return fail(res, 401, 10011, "INVALID_CREDENTIALS");
-      return ok(res, { userId: USER.id, accessToken: USER.token, refreshToken: "r", tokenType: "Bearer", expiresIn: 3600, refreshExpiresIn: 7200, scope: [] });
+      const u = USERS_BY_USERNAME.get(String(input.username ?? ""));
+      if (!u || input.password !== u.password) return fail(res, 401, 10011, "INVALID_CREDENTIALS");
+      return ok(res, { userId: u.id, accessToken: u.token, refreshToken: "r", tokenType: "Bearer", expiresIn: 3600, refreshExpiresIn: 7200, scope: [] });
     }
     if (path === "/app/member/user/get") {
-      if (req.headers.authorization !== `Bearer ${USER.token}`) return fail(res, 401, 10000, "AUTH_REQUIRED");
-      return ok(res, { id: USER.id, username: USER.username, nickname: "Alice", avatar: null });
+      const u = USERS_BY_TOKEN.get(bearer(req));
+      if (!u) return fail(res, 401, 10000, "AUTH_REQUIRED");
+      return ok(res, { id: u.id, username: u.username, nickname: u.username === "bob" ? "Bob" : "Alice", avatar: null });
+    }
+    if (path === "/app/account/preferences/app.language") {
+      const u = USERS_BY_TOKEN.get(bearer(req));
+      if (!u) return fail(res, 401, 10000, "AUTH_REQUIRED");
+      const store = prefs.get(u.token) ?? { value: null, version: 0 };
+      if (req.method === "GET") return ok(res, store);
+      if (req.method === "PUT") {
+        const input = await body(req);
+        // Optimistic concurrency: a stale version is a conflict, never a silent overwrite.
+        if (input.version !== store.version) return fail(res, 200, 10205, "PREFERENCE_CONFLICT");
+        const next = { value: typeof input.value === "string" ? input.value : null, version: store.version + 1 };
+        prefs.set(u.token, next);
+        prefWrites.push({ token: u.token, ...next });
+        return ok(res, next);
+      }
+      return fail(res, 405, 405, "METHOD_NOT_ALLOWED");
     }
 
     return fail(res, 404, 404, "ROUTE_NOT_FOUND");
@@ -248,6 +288,8 @@ export async function startMockBackend(options: { port: number; secret: string }
     goneRequests,
     refreshed,
     stateCalls,
+    prefs,
+    prefWrites,
     readySignals,
     close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
   };

@@ -22,7 +22,7 @@ import { createServer } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { startMockBackend, USER, type MockBackend } from "./mock-backend.mts";
+import { startMockBackend, USER, USER_BOB, type MockBackend } from "./mock-backend.mts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -657,11 +657,124 @@ async function suite(c: Ctx) {
       assert.deepEqual(c.backend.refreshed.filter((f) => f === "file_1").length, 1);
       await context.close();
     });
+
+    // ---- 浏览器：按身份的加载与持久保存（SSR 首帧 + 换号重读 + 切换即保存）----
+    const cookieFor = async (context: import("playwright").BrowserContext, token: string) => {
+      await context.addCookies([{ name: "neton_client_session", value: token, url: c.BASE }]);
+    };
+    await check("console language: a late site default does not overwrite an anonymous manual choice", async () => {
+      const context = await browser.newContext({ locale: "zh-CN" });
+      const page = await context.newPage();
+      let release!: () => void;
+      const ready = new Promise<void>((resolve) => { release = resolve; });
+      await page.route("**/api/site-locale", async (route) => {
+        await ready;
+        await route.fulfill({ json: { code: 0, data: { locale: "zh-CN" } } });
+      });
+      try {
+        await page.goto(`${c.BASE}/login`, { waitUntil: "domcontentloaded" });
+        const language = page.getByRole("combobox");
+        await language.selectOption("en-US");
+        await page.waitForFunction(() => document.documentElement.lang === "en-US");
+        const response = page.waitForResponse((r) => r.url().endsWith("/api/site-locale"));
+        release();
+        await response;
+        assert.equal(await language.inputValue(), "en-US");
+      } finally { release(); await context.close(); }
+    });
+
+    await check("console language: a signed-in member's persisted language is applied in the browser", async () => {
+      const context = await browser.newContext();
+      await cookieFor(context, USER_BOB.token);
+      const page = await context.newPage();
+      await page.goto(`${c.BASE}/my`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => document.documentElement.lang === "en-US", undefined, { timeout: 10_000 });
+      assert.match(await page.locator("body").innerText(), /Dashboard/);
+      await context.close();
+    });
+
+    await check("console language: switching the signed-in identity on the same path re-reads the new member's language", async () => {
+      const context = await browser.newContext();
+      await cookieFor(context, USER_BOB.token);
+      const page = await context.newPage();
+      await page.goto(`${c.BASE}/my`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => document.documentElement.lang === "en-US", undefined, { timeout: 10_000 });
+      // swap the session to alice (no preference) and reload the protected layout for the same path
+      await cookieFor(context, USER.token);
+      await page.goto(`${c.BASE}/my`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => document.documentElement.lang === "zh-CN", undefined, { timeout: 10_000 });
+      assert.match(await page.locator("body").innerText(), /工作台/, "the language follows the current identity, not the first one");
+      await context.close();
+    });
+
+    await check("console language: focus revalidates a changed cookie on the same mounted path", async () => {
+      const context = await browser.newContext();
+      await cookieFor(context, USER_BOB.token);
+      const page = await context.newPage();
+      await page.goto(`${c.BASE}/my`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => document.documentElement.lang === "en-US");
+      await cookieFor(context, USER.token);
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await page.waitForFunction(() => document.documentElement.lang === "zh-CN");
+      assert.match(await page.locator("body").innerText(), /工作台/);
+      assert.match(await page.locator("body").innerText(), /Alice/, "a changed session also discards the previous user's workspace");
+      await context.close();
+    });
+
+    await check("console language: proxy rejects a stale subject before forwarding a preference write", async () => {
+      const context = await browser.newContext();
+      await cookieFor(context, USER_BOB.token);
+      const response = await context.request.put(`${c.BASE}/api/backend/app/account/preferences/app.language`, {
+        headers: { "X-Neton-Csrf": "1", "X-Neton-Preference-Subject": "not-bob" },
+        data: { value: "ja", version: 1 },
+      });
+      assert.equal(response.status(), 409);
+      assert.equal(c.backend.prefs.get(USER_BOB.token)?.value, "en-US");
+      await context.close();
+    });
+
+    await check("console language: switching while signed in persists to the account preference (switch = save)", async () => {
+      const context = await browser.newContext();
+      await cookieFor(context, USER.token);
+      const page = await context.newPage();
+      await page.goto(`${c.BASE}/my`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => document.documentElement.lang === "zh-CN", undefined, { timeout: 10_000 });
+      await page.getByRole("button", { name: "账户菜单" }).click();
+      await page.getByRole("menuitem", { name: "语言" }).click();
+      await page.getByRole("menuitemradio", { name: "English" }).click();
+      for (let i = 0; i < 40 && c.backend.prefs.get(USER.token)?.value !== "en-US"; i += 1) await sleep(250);
+      assert.equal(c.backend.prefs.get(USER.token)?.value, "en-US", "the console switch wrote the account preference");
+      assert.equal(await page.evaluate(() => document.documentElement.lang), "en-US");
+      await context.close();
+    });
+
+    await check("console language: a failed save rolls back and shows a warning", async () => {
+      const context = await browser.newContext();
+      await cookieFor(context, USER_BOB.token);
+      const page = await context.newPage();
+      await page.goto(`${c.BASE}/my`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => document.documentElement.lang === "en-US", undefined, { timeout: 10_000 });
+      // the version-read succeeds, but every PUT fails: the switch must not stick and must warn
+      await page.route("**/api/backend/app/account/preferences/app.language", (route) =>
+        route.request().method() === "PUT" ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: 3, message: "SERVER_ERROR" }) }) : route.continue());
+      await page.getByRole("button", { name: "Account menu" }).click();
+      await page.getByRole("menuitem", { name: "Language" }).click();
+      await page.getByRole("menuitemradio", { name: "简体中文" }).click();
+      await page.waitForSelector('[role="status"]', { timeout: 10_000 });
+      assert.match(await page.locator('[role="status"]').first().innerText(), /couldn't be saved/);
+      // rolled back to the last known-good language (bob's own en-US), not the failed choice
+      await page.waitForFunction(() => document.documentElement.lang === "en-US", undefined, { timeout: 10_000 });
+      assert.notEqual(await page.evaluate(() => document.documentElement.lang), "zh-CN");
+      await context.close();
+    });
   } finally {
     await browser.close();
   }
 
-  await check("lighthouse gate (mobile, devtools throttling, median of 3): object page within LCP 2.0 s / CLS 0.05 / TBT 200 ms", async () => {
+  // A scoped functional acceptance may omit the unrelated three-run performance audit.
+  // The default/full gate is unchanged; skipped performance is explicitly reported, never counted green.
+  if (process.env.E2E_SKIP_LIGHTHOUSE === "1") console.log("[e2e] Lighthouse omitted: scoped functional acceptance, no performance claim");
+  else await check("lighthouse gate (mobile, devtools throttling, median of 3): object page within LCP 2.0 s / CLS 0.05 / TBT 200 ms", async () => {
     const out = path.join(path.dirname(c.vitalsLog), "lighthouse.json");
     await run("pnpm", ["--silent", "lighthouse", "--runs", "3", "--out", out, `${c.BASE}/item/1`], {}, root);
     const report = JSON.parse(await readFile(out, "utf8")) as { throttlingMethod: string; results: { url: string; runs: number; violations: string[]; median: Record<string, number> }[] };

@@ -14,6 +14,7 @@
  */
 
 import * as React from "react";
+import { resolveInitialLocale } from "./locale-resolution";
 import { formatMessage } from "./format-message";
 import { setFormatLocale } from "./types";
 
@@ -33,19 +34,8 @@ export interface I18nConfig {
 
 const STORAGE_KEY = "neton.locale";
 
-/** 选初始语言：本地记住的 → 浏览器偏好里第一个受支持的 → 默认。 */
-export function resolveInitialLocale(config: I18nConfig): string {
-  if (typeof window === "undefined") return config.defaultLocale;
-  const saved = window.localStorage.getItem(STORAGE_KEY);
-  if (saved && config.locales.includes(saved)) return saved;
-  for (const pref of window.navigator.languages ?? [window.navigator.language]) {
-    const exact = config.locales.find((l) => l.toLowerCase() === pref.toLowerCase());
-    if (exact) return exact;
-    const base = config.locales.find((l) => l.split("-")[0] === pref.split("-")[0]);
-    if (base) return base;
-  }
-  return config.defaultLocale;
-}
+/** Authenticated: saved preference, then site default. Anonymous: explicit local choice, browser, default. */
+export { resolveInitialLocale } from "./locale-resolution";
 
 // 模板渲染在 format-message.ts（服务端翻译也用它，不能放在 "use client" 文件里）
 export { formatMessage } from "./format-message";
@@ -69,6 +59,8 @@ export function I18nProvider({
   registry = {},
   catalogs = {},
   serverLocale = false,
+  siteLocale,
+  userLocale,
   children,
 }: {
   config: I18nConfig;
@@ -79,15 +71,38 @@ export function I18nProvider({
    * 首次渲染与服务端 HTML 逐字节一致。词条应由服务端预先放进 [catalogs]，岛屿首帧就有译文。
    */
   serverLocale?: boolean;
+  /**
+   * 后台「站点语言」下发的全站默认（site/public 的 locale）：服务端渲染与客户端首帧直接用它，
+   * 不等挂载后再探测，避免先闪默认语言。个人偏好（userLocale / 本地缓存）仍优先于它。
+   */
+  siteLocale?: string;
+  /**
+   * 登录用户的服务端持久偏好（个人语言）。异步到达：有效值一到即覆盖当前语言；
+   * 空串 / null 表示未设置（回站点默认）。未登录宿主不传即可。
+   */
+  userLocale?: string | null;
   children: React.ReactNode;
 }) {
-  const [locale, setLocaleState] = React.useState(config.defaultLocale);
+  // An optional known preference can seed the provider; asynchronous preferences resolve on mount.
+  const [locale, setLocaleState] = React.useState(() => {
+    if (userLocale && config.locales.includes(userLocale)) return userLocale;
+    return siteLocale && config.locales.includes(siteLocale) ? siteLocale : config.defaultLocale;
+  });
+  const manual = React.useRef<string | undefined>(undefined);
+  const previousUser = React.useRef(userLocale);
   const loaded = React.useRef(new Map<string, Messages>()); // `${ns}:${locale}`
   const inflight = React.useRef(new Set<string>());
   const [version, bump] = React.useReducer((n: number) => n + 1, 0);
 
-  // 首次挂载后再读本地偏好：服务端渲染与静态导出都只认默认语言，避免水合不一致。
-  React.useEffect(() => { if (!serverLocale) setLocaleState(resolveInitialLocale(config)); }, [config, serverLocale]);
+  // 首次挂载后再读本地偏好与浏览器协商；个人偏好（userLocale）异步到达后重新解析并覆盖。
+  // Identity-scoped host keys reset manual state on account changes. A late site default is not a user choice.
+  React.useEffect(() => {
+    if (serverLocale) return;
+    // Only explicit local choices are persisted; a late site default must not mask browser negotiation.
+    if (previousUser.current !== userLocale) manual.current = undefined;
+    previousUser.current = userLocale;
+    setLocaleState(manual.current ?? resolveInitialLocale(config, siteLocale, userLocale));
+  }, [config, serverLocale, siteLocale, userLocale]);
   React.useEffect(() => {
     document.documentElement.lang = locale;
     setFormatLocale(locale, config.timeZone);
@@ -124,6 +139,7 @@ export function I18nProvider({
 
   const setLocale = React.useCallback((next: string) => {
     if (!config.locales.includes(next)) return;
+    manual.current = next;
     if (!serverLocale) window.localStorage.setItem(STORAGE_KEY, next);
     setLocaleState(next);
   }, [config.locales, serverLocale]);
