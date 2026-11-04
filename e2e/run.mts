@@ -698,7 +698,9 @@ async function suite(c: Ctx) {
         await route.fulfill({ json: { code: 0, data: { locale: "zh-CN" } } });
       });
       try {
+        const hydrated = page.waitForResponse((r) => r.url().endsWith("/api/session"));
         await page.goto(`${c.BASE}/login`, { waitUntil: "domcontentloaded" });
+        await hydrated; // the preference effect is mounted; do not select a non-hydrated SSR form
         const language = page.getByRole("combobox");
         await language.selectOption("en-US");
         await page.waitForFunction(() => document.documentElement.lang === "en-US");
